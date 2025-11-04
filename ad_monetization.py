@@ -93,9 +93,12 @@ class AdMonetization:
         """
         session_id = self.create_ad_session(user_id)
         
+        # First verification page URL
+        first_page_url = f"{self.blog_url}2025/11/test-page-1.html?session={session_id}"
+        
         LOGGER(__name__).info(f"User {user_id}: Sending to blog for ad verification (navigate pages 1-5)")
         
-        return session_id, self.blog_url
+        return session_id, first_page_url
     
     def get_premium_downloads(self) -> int:
         """Get number of downloads given for watching ads"""
