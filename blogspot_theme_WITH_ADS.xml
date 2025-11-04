@@ -13,6 +13,9 @@
     
     <b:include data='blog' name='all-head-content'/>
     
+    <!-- OnClickA Video + In-Page Ads -->
+    <script async='async' src='https://js.onclckmn.com/static/onclicka.js' data-admpid='388593'></script>
+    
     <!-- SEO Meta Tags -->
     <b:if cond='data:view.isPost'>
       <meta expr:content='data:post.title' property='og:title'/>
@@ -124,13 +127,24 @@ h3 { font-size: 1.25rem; }
   }
 }
 
+@media (max-width: 767px) {
+  .main-wrapper .container,
+  .content-wrapper {
+    padding: 0 !important;
+  }
+  
+  .post {
+    margin-left: 0;
+    margin-right: 0;
+    border-radius: 0;
+  }
+}
+
 .header-wrapper {
   background: $(header.background.color);
   padding: 1rem 0;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  position: sticky;
-  top: 0;
-  z-index: 1000;
+  position: relative;
   margin: 0;
 }
 
@@ -553,7 +567,41 @@ h3 { font-size: 1.25rem; }
 .ad-zone {
   margin: 0.75rem 0;
   text-align: center;
-  min-height: 50px;
+  min-height: 90px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.ad-zone iframe,
+.ad-zone img,
+.ad-zone div,
+.ad-zone ins {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block;
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  .ad-zone {
+    margin: 0.5rem 0;
+    padding: 0;
+    width: 100%;
+  }
+  
+  .ad-zone iframe,
+  .ad-zone ins {
+    max-width: 100% !important;
+    width: 100% !important;
+    display: block !important;
+    margin: 0 auto !important;
+  }
+  
+  /* Ensure ad containers don't overflow */
+  .ad-zone > div {
+    max-width: 100%;
+    overflow: hidden;
+  }
 }
 
 ]]></b:skin>
@@ -669,6 +717,21 @@ h3 { font-size: 1.25rem; }
                           <div class='post-snippet'><data:post.snippet/></div>
                         <b:else/>
                           <div class='post-body-content' itemprop='articleBody'><data:post.body/></div>
+                          
+                          <!-- IN-ARTICLE AD (After content, before footer) - Single post only -->
+                          <div class='ad-zone' style='margin: 1.5rem 0;'>
+                            <!-- Adsterra Banner 728x90 -->
+                            <script type='text/javascript'>
+        atOptions = {
+                &apos;key&apos; : &apos;c41a9f7776da0a69bae50804a4826f3d&apos;,
+                &apos;format&apos; : &apos;iframe&apos;,
+                &apos;height&apos; : 90,
+                &apos;width&apos; : 728,
+                &apos;params&apos; : {}
+        };
+</script>
+                            <script type='text/javascript' src='//www.highperformanceformat.com/c41a9f7776da0a69bae50804a4826f3d/invoke.js'></script>
+                          </div>
                         </b:if>
                       </div>
 
@@ -687,7 +750,22 @@ h3 { font-size: 1.25rem; }
                       </div>
                     </div>
 
+                    <!-- END OF ARTICLE AD (After entire post, before comments) - Single post only -->
                     <b:if cond='data:view.isSingleItem'>
+                      <div class='ad-zone' style='margin: 1.5rem 0;'>
+                        <!-- Adsterra Banner 300x250 -->
+                        <script type='text/javascript'>
+        atOptions = {
+                &apos;key&apos; : &apos;5f3913da0e004390580a604d6e48a9b8&apos;,
+                &apos;format&apos; : &apos;iframe&apos;,
+                &apos;height&apos; : 250,
+                &apos;width&apos; : 300,
+                &apos;params&apos; : {}
+        };
+</script>
+                        <script type='text/javascript' src='//www.highperformanceformat.com/5f3913da0e004390580a604d6e48a9b8/invoke.js'></script>
+                      </div>
+                      
                       <b:include data='post' name='comment_picker'/>
                     </b:if>
                   </article>
@@ -733,13 +811,22 @@ h3 { font-size: 1.25rem; }
 
           <aside class='sidebar' role='complementary'>
             
-            <!-- Adsterra Native Banner (Sidebar) -->
+            <!-- Adsterra Banner 300x250 (Sidebar) -->
             <div class='ad-zone'>
-              <script async="async" data-cfasync="false" src="//pl27986715.effectivegatecpm.com/6654fd354b9f9b188fe1890d08ef14b5/invoke.js"></script>
-              <div id="container-6654fd354b9f9b188fe1890d08ef14b5"></div>
+              <script type='text/javascript'>
+        atOptions = {
+                &apos;key&apos; : &apos;5f3913da0e004390580a604d6e48a9b8&apos;,
+                &apos;format&apos; : &apos;iframe&apos;,
+                &apos;height&apos; : 250,
+                &apos;width&apos; : 300,
+                &apos;params&apos; : {}
+        };
+</script>
+              <script type='text/javascript' src='//www.highperformanceformat.com/5f3913da0e004390580a604d6e48a9b8/invoke.js'></script>
             </div>
 
-            <b:section class='sidebar' id='sidebar' preferred='yes' showaddelement='yes'/>
+            <b:section class='sidebar' id='sidebar' preferred='yes' showaddelement='yes'>
+            </b:section>
 
           </aside>
         </div>
@@ -748,6 +835,21 @@ h3 { font-size: 1.25rem; }
 
     <div class='footer-wrapper' itemscope='itemscope' itemtype='http://schema.org/WPFooter' role='contentinfo'>
       <div class='container'>
+        <!-- BOTTOM OF PAGE AD (Footer area) -->
+        <div class='ad-zone' style='margin-bottom: 1.5rem;'>
+          <!-- Adsterra Banner 728x90 -->
+          <script type='text/javascript'>
+        atOptions = {
+                &apos;key&apos; : &apos;c41a9f7776da0a69bae50804a4826f3d&apos;,
+                &apos;format&apos; : &apos;iframe&apos;,
+                &apos;height&apos; : 90,
+                &apos;width&apos; : 728,
+                &apos;params&apos; : {}
+        };
+</script>
+          <script type='text/javascript' src='//www.highperformanceformat.com/c41a9f7776da0a69bae50804a4826f3d/invoke.js'></script>
+        </div>
+        
         <div class='footer'>
           <p>&#169; <script>document.write(new Date().getFullYear())</script> <data:blog.title/>. All rights reserved.</p>
           <p>Powered by <a href='https://www.blogger.com' rel='nofollow'>Blogger</a></p>
@@ -757,6 +859,92 @@ h3 { font-size: 1.25rem; }
 
     <!-- Adsterra Popunder (Place before closing body tag for best performance) -->
     <script type='text/javascript' src='//pl27986671.effectivegatecpm.com/c0/b0/15/c0b015cd341a99514c7c6e1d5ce12b99.js'></script>
+
+    <!-- Ad Verification Timer System -->
+    <script type='text/javascript'>
+    <![CDATA[
+    (function() {
+      // Get URL parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const sessionId = urlParams.get('session');
+      
+      // If session ID exists, start verification process
+      if (sessionId) {
+        // Initialize or load session data
+        let sessionData = localStorage.getItem('ad_verify_' + sessionId);
+        if (!sessionData) {
+          sessionData = {
+            sessionId: sessionId,
+            startTime: Date.now(),
+            pagesVisited: [window.location.pathname],
+            currentPage: 1,
+            totalPages: 5,
+            timePerPage: 30000 // 30 seconds per page
+          };
+          localStorage.setItem('ad_verify_' + sessionId, JSON.stringify(sessionData));
+        } else {
+          sessionData = JSON.parse(sessionData);
+          // Track new page if not already visited
+          if (!sessionData.pagesVisited.includes(window.location.pathname)) {
+            sessionData.pagesVisited.push(window.location.pathname);
+            sessionData.currentPage = sessionData.pagesVisited.length;
+            localStorage.setItem('ad_verify_' + sessionId, JSON.stringify(sessionData));
+          }
+        }
+        
+        // Create timer bar (above content, not in header)
+        const timerBar = document.createElement('div');
+        timerBar.id = 'verification-timer';
+        timerBar.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 20px; text-align: center; font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 9999; line-height: 1.4;';
+        
+        const mainContent = document.querySelector('.main-wrapper');
+        if (mainContent) {
+          mainContent.style.marginTop = '60px'; // Push content below timer
+        }
+        
+        // Calculate remaining time
+        const elapsed = Date.now() - sessionData.startTime;
+        const totalTime = sessionData.timePerPage * sessionData.totalPages;
+        let remainingTime = Math.max(0, totalTime - elapsed);
+        
+        function updateTimer() {
+          const minutes = Math.floor(remainingTime / 60000);
+          const seconds = Math.floor((remainingTime % 60000) / 1000);
+          
+          const progress = ((sessionData.currentPage / sessionData.totalPages) * 100).toFixed(0);
+          
+          timerBar.innerHTML = '<div style="max-width: 1200px; margin: 0 auto;">' +
+            '<strong>🎯 Ad Verification Progress</strong><br/>' +
+            'Page ' + sessionData.currentPage + ' of ' + sessionData.totalPages + ' (' + progress + '%) | ' +
+            'Time Remaining: ' + minutes + ':' + (seconds < 10 ? '0' : '') + seconds +
+            (sessionData.currentPage >= sessionData.totalPages ? ' | ✅ <strong>COMPLETE! Check Telegram for code</strong>' : '') +
+            '</div>';
+          
+          if (remainingTime > 0 && sessionData.currentPage < sessionData.totalPages) {
+            remainingTime -= 1000;
+            setTimeout(updateTimer, 1000);
+          } else if (sessionData.currentPage >= sessionData.totalPages) {
+            // User completed all pages - send to verification endpoint
+            setTimeout(function() {
+              window.location.href = 'https://' + window.location.hostname.replace('replit.app', 'replit.dev') + '/verify_ad?session=' + sessionId;
+            }, 3000);
+          } else {
+            // Time expired
+            timerBar.innerHTML = '<div style="max-width: 1200px; margin: 0 auto;">⏰ <strong>Time Expired!</strong> Please return to Telegram and try again with /getpremium</div>';
+            setTimeout(function() {
+              localStorage.removeItem('ad_verify_' + sessionId);
+              timerBar.remove();
+              if (mainContent) mainContent.style.marginTop = '0';
+            }, 5000);
+          }
+        }
+        
+        document.body.insertBefore(timerBar, document.body.firstChild);
+        updateTimer();
+      }
+    })();
+    ]]>
+    </script>
 
     <b:include data='blog' name='google-analytics'/>
   </body>

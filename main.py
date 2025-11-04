@@ -1216,21 +1216,25 @@ async def get_premium_command(event):
         
         bot_domain = PyroConf.get_app_url()
         
-        verification_code, ad_url = ad_monetization.generate_ad_link(event.sender_id, bot_domain)
+        session_id, ad_url = ad_monetization.generate_ad_link(event.sender_id, bot_domain)
+        
+        # Add session parameter to blog URL for timer tracking
+        ad_url_with_session = f"{ad_url}?session={session_id}"
         
         premium_text = (
             f"🎬 **Get {PREMIUM_DOWNLOADS} FREE downloads!**\n\n"
             "**How it works:**\n"
             "1️⃣ Click the button below\n"
-            "2️⃣ View the short ad (5-10 seconds)\n"
-            "3️⃣ Your verification code will appear automatically\n"
-            "4️⃣ Copy the code and send: `/verifypremium <code>`\n\n"
-            "⚠️ **Note:** Please wait for the ad page to fully load!\n\n"
-            "⏱️ Code expires in 30 minutes"
+            "2️⃣ Navigate through pages 1-5 on our blog (2.5 minutes total)\n"
+            "3️⃣ A timer will show your progress at the top\n"
+            "4️⃣ After completing all pages, get your verification code\n"
+            "5️⃣ Send: `/verifypremium <code>`\n\n"
+            "⚠️ **Note:** You must visit 5 different pages within the time limit!\n\n"
+            "⏱️ Session expires in 30 minutes"
         )
         
         markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton.url(f"🎁 Watch Ad & Get {PREMIUM_DOWNLOADS} Downloads", ad_url)]
+            [InlineKeyboardButton.url(f"🎁 Start Verification (Visit Pages 1-5)", ad_url_with_session)]
         ])
         
         # Send with video (message ID 42)

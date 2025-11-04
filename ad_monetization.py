@@ -88,14 +88,14 @@ class AdMonetization:
     
     def generate_ad_link(self, user_id: int, bot_domain: str | None = None) -> tuple[str, str]:
         """
-        Generate ad link - sends user to Adsterra SmartLink
+        Generate ad link - sends user to blog where they navigate pages 1-5 for verification
         All ads are on the website, not in the bot
         """
         session_id = self.create_ad_session(user_id)
         
-        LOGGER(__name__).info(f"User {user_id}: Sending to Adsterra SmartLink (all ads on website)")
+        LOGGER(__name__).info(f"User {user_id}: Sending to blog for ad verification (navigate pages 1-5)")
         
-        return session_id, self.adsterra_smartlink
+        return session_id, self.blog_url
     
     def get_premium_downloads(self) -> int:
         """Get number of downloads given for watching ads"""
