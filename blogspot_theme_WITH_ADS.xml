@@ -13,6 +13,11 @@
     
     <b:include data='blog' name='all-head-content'/>
     
+    <!-- Modern Google Font for Header -->
+    <link rel='preconnect' href='https://fonts.googleapis.com'/>
+    <link rel='preconnect' href='https://fonts.gstatic.com' crossorigin='crossorigin'/>
+    <link href='https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&amp;display=swap' rel='stylesheet'/>
+    
     <!-- Preconnect to ad servers for faster loading -->
     <link rel='preconnect' href='https://js.onclckmn.com'/>
     <link rel='preconnect' href='https://www.highperformanceformat.com'/>
@@ -104,6 +109,26 @@ img {
   display: block;
 }
 
+/* Prevent content overflow */
+table, pre, code, iframe, embed, object {
+  max-width: 100%;
+  overflow-x: auto;
+  word-wrap: break-word;
+}
+
+table {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+  border-collapse: collapse;
+}
+
+@media (max-width: 768px) {
+  table {
+    font-size: 0.85rem;
+  }
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-weight: bold;
   line-height: 1.3;
@@ -134,38 +159,39 @@ h3 { font-size: 1.25rem; }
 }
 
 @media (max-width: 767px) {
-  .main-wrapper .container,
-  .content-wrapper {
-    padding: 0 !important;
+  .container {
+    padding: 0 0.75rem;
   }
   
   .post {
     margin-left: 0;
     margin-right: 0;
-    border-radius: 0;
   }
 }
 
 .header-wrapper {
-  background: $(header.background.color);
-  padding: 1rem 0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 1.5rem 0;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
   position: relative;
   margin: 0;
 }
 
 .Header h1 {
-  font: $(header.title.font);
-  color: $(header.title.color);
+  font-family: 'Poppins', 'Roboto', sans-serif;
+  font-weight: 700;
+  color: #ffffff;
   margin: 0;
   text-align: center;
   font-size: 1.75rem;
   padding: 0;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  letter-spacing: 1px;
 }
 
 @media (min-width: 768px) {
   .Header h1 {
-    font-size: 2.25rem;
+    font-size: 2.5rem;
   }
 }
 
@@ -207,17 +233,25 @@ h3 { font-size: 1.25rem; }
 .main-wrapper {
   padding: 1rem 0;
   margin: 0;
+  width: 100%;
+}
+
+.main-content {
+  width: 100%;
+  min-width: 0;
 }
 
 .content-wrapper {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1rem;
+  width: 100%;
 }
 
 @media (min-width: 1024px) {
   .content-wrapper {
     grid-template-columns: 1fr 300px;
+    gap: 2rem;
   }
 }
 
@@ -229,11 +263,15 @@ h3 { font-size: 1.25rem; }
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   transition: all 0.3s ease;
   border: 1px solid #e5e7eb;
+  width: 100%;
+  max-width: 100%;
 }
 
-.post:hover {
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-  transform: translateY(-2px);
+@media (min-width: 768px) {
+  .post:hover {
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+  }
 }
 
 .post-thumbnail {
@@ -256,12 +294,18 @@ h3 { font-size: 1.25rem; }
 
 .post-body {
   padding: 1rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 @media (min-width: 768px) {
   .post-body {
-    padding: 1.25rem;
+    padding: 1.5rem;
   }
+}
+
+.post-body * {
+  max-width: 100%;
 }
 
 .post-title {
@@ -434,6 +478,13 @@ h3 { font-size: 1.25rem; }
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  width: 100%;
+}
+
+@media (max-width: 1023px) {
+  .sidebar {
+    display: none;
+  }
 }
 
 .widget {
@@ -442,6 +493,21 @@ h3 { font-size: 1.25rem; }
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   border: 1px solid #e5e7eb;
+}
+
+/* Remove white boxes from Header and PageList - make them clean and minimal */
+.header-wrapper .widget {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+/* Hide the PageList navigation completely for a cleaner look */
+#navigation {
+  display: none !important;
 }
 
 .widget h2 {
@@ -571,42 +637,59 @@ h3 { font-size: 1.25rem; }
 }
 
 .ad-zone {
-  margin: 0.75rem 0;
+  margin: 1rem 0;
+  padding: 0;
   text-align: center;
   min-height: 90px;
   max-width: 100%;
   overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .ad-zone iframe,
 .ad-zone img,
 .ad-zone div,
 .ad-zone ins {
-  max-width: 100% !important;
-  height: auto !important;
-  display: block;
+  max-width: 100%;
+  height: auto;
   margin: 0 auto;
+}
+
+/* In-article ad styling */
+.in-article-ad {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.in-article-ad::before {
+  content: 'Advertisement';
+  display: block;
+  font-size: 0.75rem;
+  color: #999;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 @media (max-width: 768px) {
   .ad-zone {
-    margin: 0.5rem 0;
-    padding: 0;
-    width: 100%;
+    margin: 0.75rem 0;
+    min-height: 50px;
   }
   
   .ad-zone iframe,
   .ad-zone ins {
-    max-width: 100% !important;
-    width: 100% !important;
-    display: block !important;
-    margin: 0 auto !important;
+    max-width: 100%;
   }
   
-  /* Ensure ad containers don't overflow */
-  .ad-zone > div {
-    max-width: 100%;
-    overflow: hidden;
+  .in-article-ad {
+    margin: 1rem 0;
+    padding: 0.75rem;
   }
 }
 
@@ -628,13 +711,17 @@ h3 { font-size: 1.25rem; }
                 <b:if cond='data:sourceUrl'>
                   <a expr:href='data:blog.homepageUrl'><img expr:alt='data:blog.title' expr:src='data:sourceUrl'/></a>
                 <b:else/>
-                  <h1 itemprop='name'><data:blog.title/></h1>
+                  <a expr:href='data:blog.homepageUrl' style='text-decoration: none; color: inherit;'>
+                    <h1 itemprop='name'><data:blog.title/></h1>
+                  </a>
                   <b:if cond='data:blog.metaDescription'>
                     <p class='description'><data:blog.metaDescription/></p>
                   </b:if>
                 </b:if>
               <b:else/>
-                <h1 itemprop='name'><data:blog.title/></h1>
+                <a expr:href='data:blog.homepageUrl' style='text-decoration: none; color: inherit;'>
+                  <h1 itemprop='name'><data:blog.title/></h1>
+                </a>
                 <b:if cond='data:blog.metaDescription'>
                   <p class='description'><data:blog.metaDescription/></p>
                 </b:if>
@@ -668,6 +755,14 @@ h3 { font-size: 1.25rem; }
       <div class='container'>
         <div class='content-wrapper'>
           <main class='main-content' id='main' itemscope='itemscope' itemtype='http://schema.org/Blog' role='main'>
+            
+            <!-- EXTRA AD SPACE 3 (Above Content) - Ready for future ads -->
+            <div class='ad-zone ad-placeholder' id='ad-extra-above-content' style='margin: 1rem 0; display: none;'>
+              <!-- Add your ad code here when ready -->
+              <div style='background: #f0f0f0; padding: 1rem; text-align: center; color: #999; border: 2px dashed #ddd; border-radius: 8px;'>
+                Extra Ad Space 3 - Above Content
+              </div>
+            </div>
             
             <!-- Adsterra Native Banner (Above posts) -->
             <div class='ad-zone'>
@@ -722,7 +817,35 @@ h3 { font-size: 1.25rem; }
                         <b:if cond='data:view.isMultipleItems'>
                           <div class='post-snippet'><data:post.snippet/></div>
                         <b:else/>
-                          <div class='post-body-content' itemprop='articleBody'><data:post.body/></div>
+                          <div class='post-body-content' itemprop='articleBody' id='article-content'><data:post.body/></div>
+                          
+                          <!-- JavaScript to inject ad in middle of article -->
+                          <script type='text/javascript'>
+//<![CDATA[
+(function() {
+  var content = document.getElementById('article-content');
+  if (content) {
+    var paragraphs = content.querySelectorAll('p');
+    if (paragraphs.length >= 4) {
+      var targetParagraph = paragraphs[Math.floor(paragraphs.length / 2)];
+      
+      var adDiv = document.createElement('div');
+      adDiv.className = 'in-article-ad';
+      adDiv.style.cssText = 'margin: 1.5rem 0; padding: 1rem; background: #f8f9fa; border-radius: 8px; text-align: center;';
+      
+      var isMobile = window.innerWidth < 768;
+      if (isMobile) {
+        adDiv.innerHTML = '<script type="text/javascript">atOptions = {"key":"5f3913da0e004390580a604d6e48a9b8","format":"iframe","height":250,"width":300,"params":{}};<\/script><script type="text/javascript" src="//www.highperformanceformat.com/5f3913da0e004390580a604d6e48a9b8/invoke.js"><\/script>';
+      } else {
+        adDiv.innerHTML = '<script type="text/javascript">atOptions = {"key":"c41a9f7776da0a69bae50804a4826f3d","format":"iframe","height":90,"width":728,"params":{}};<\/script><script type="text/javascript" src="//www.highperformanceformat.com/c41a9f7776da0a69bae50804a4826f3d/invoke.js"><\/script>';
+      }
+      
+      targetParagraph.parentNode.insertBefore(adDiv, targetParagraph.nextSibling);
+    }
+  }
+})();
+//]]>
+</script>
                           
                           <!-- IN-ARTICLE AD (After content, before footer) - Single post only -->
                           <div class='ad-zone ad-responsive' id='ad-in-article' style='margin: 1.5rem 0;'>
@@ -817,6 +940,14 @@ h3 { font-size: 1.25rem; }
               <script async="async" data-cfasync="false" src="//pl27986715.effectivegatecpm.com/6654fd354b9f9b188fe1890d08ef14b5/invoke.js"></script>
               <div id="container-6654fd354b9f9b188fe1890d08ef14b5"></div>
             </div>
+            
+            <!-- EXTRA AD SPACE 4 (Below Content) - Ready for future ads -->
+            <div class='ad-zone ad-placeholder' id='ad-extra-below-content' style='margin: 1rem 0; display: none;'>
+              <!-- Add your ad code here when ready -->
+              <div style='background: #f0f0f0; padding: 1rem; text-align: center; color: #999; border: 2px dashed #ddd; border-radius: 8px;'>
+                Extra Ad Space 4 - Below Content
+              </div>
+            </div>
           </main>
 
           <aside class='sidebar' role='complementary'>
@@ -833,6 +964,14 @@ h3 { font-size: 1.25rem; }
         };
 </script>
               <script type='text/javascript' src='//www.highperformanceformat.com/5f3913da0e004390580a604d6e48a9b8/invoke.js'></script>
+            </div>
+
+            <!-- EXTRA AD SPACE 5 (Sidebar) - Ready for future ads -->
+            <div class='ad-zone ad-placeholder' id='ad-extra-sidebar' style='margin: 1rem 0; display: none;'>
+              <!-- Add your ad code here when ready -->
+              <div style='background: #f0f0f0; padding: 1rem; text-align: center; color: #999; border: 2px dashed #ddd; border-radius: 8px;'>
+                Extra Ad Space 5 - Sidebar
+              </div>
             </div>
 
             <b:section class='sidebar' id='sidebar' preferred='yes' showaddelement='yes'>
@@ -862,6 +1001,28 @@ h3 { font-size: 1.25rem; }
         })();
 //]]>
 </script>
+        </div>
+        
+        <!-- NATIVE BANNER IN FOOTER -->
+        <div class='ad-zone' id='ad-footer-native' style='margin: 1.5rem 0;'>
+          <script async="async" data-cfasync="false" src="//pl27986715.effectivegatecpm.com/6654fd354b9f9b188fe1890d08ef14b5/invoke.js"></script>
+          <div id="container-6654fd354b9f9b188fe1890d08ef14b5-footer"></div>
+        </div>
+        
+        <!-- EXTRA AD SPACE 1 (Footer Top) - Ready for future ads -->
+        <div class='ad-zone ad-placeholder' id='ad-extra-footer-1' style='margin: 1rem 0; display: none;'>
+          <!-- Add your ad code here when ready -->
+          <div style='background: #f0f0f0; padding: 1rem; text-align: center; color: #999; border: 2px dashed #ddd; border-radius: 8px;'>
+            Extra Ad Space 1 - Footer Top
+          </div>
+        </div>
+        
+        <!-- EXTRA AD SPACE 2 (Footer Bottom) - Ready for future ads -->
+        <div class='ad-zone ad-placeholder' id='ad-extra-footer-2' style='margin: 1rem 0; display: none;'>
+          <!-- Add your ad code here when ready -->
+          <div style='background: #f0f0f0; padding: 1rem; text-align: center; color: #999; border: 2px dashed #ddd; border-radius: 8px;'>
+            Extra Ad Space 2 - Footer Bottom
+          </div>
         </div>
         
         <div class='footer'>
