@@ -722,6 +722,7 @@ h3 { font-size: 1.25rem; }
                           <div class='ad-zone ad-responsive' id='ad-in-article' style='margin: 1.5rem 0;'>
                             <!-- Adsterra Banner Responsive (728x90 desktop / 300x250 mobile) -->
                             <script type='text/javascript'>
+//<![CDATA[
         (function() {
           var isMobile = window.innerWidth < 768;
           if (isMobile) {
@@ -732,6 +733,7 @@ h3 { font-size: 1.25rem; }
             document.write('<scr' + 'ipt type="text/javascript" src="//www.highperformanceformat.com/c41a9f7776da0a69bae50804a4826f3d/invoke.js"></scr' + 'ipt>');
           }
         })();
+//]]>
 </script>
                           </div>
                         </b:if>
@@ -841,6 +843,7 @@ h3 { font-size: 1.25rem; }
         <div class='ad-zone ad-footer-responsive' id='ad-footer' style='margin-bottom: 1.5rem;'>
           <!-- Adsterra Banner Responsive (728x90 desktop / 300x250 mobile) -->
           <script type='text/javascript'>
+//<![CDATA[
         (function() {
           var isMobile = window.innerWidth < 768;
           if (isMobile) {
@@ -851,6 +854,7 @@ h3 { font-size: 1.25rem; }
             document.write('<scr' + 'ipt type="text/javascript" src="//www.highperformanceformat.com/c41a9f7776da0a69bae50804a4826f3d/invoke.js"></scr' + 'ipt>');
           }
         })();
+//]]>
 </script>
         </div>
         
@@ -919,18 +923,18 @@ h3 { font-size: 1.25rem; }
         function updateTimer() {
           const progress = ((currentPageNum / totalPages) * 100).toFixed(0);
           
-          if (timeRemaining > 0) {
-            timerBar.innerHTML = '<div style="max-width: 1200px; margin: 0 auto;">' +
-              '<strong>🎯 Page ' + currentPageNum + ' of ' + totalPages + ' (' + progress + '%)</strong><br/>' +
+          if (timeRemaining &gt; 0) {
+            timerBar.innerHTML = '&lt;div style="max-width: 1200px; margin: 0 auto;"&gt;' +
+              '&lt;strong&gt;🎯 Page ' + currentPageNum + ' of ' + totalPages + ' (' + progress + '%)&lt;/strong&gt;&lt;br/&gt;' +
               'Please wait: ' + timeRemaining + ' seconds...' +
-              '</div>';
+              '&lt;/div&gt;';
             timeRemaining--;
             setTimeout(updateTimer, 1000);
           } else {
             timerComplete = true;
-            timerBar.innerHTML = '<div style="max-width: 1200px; margin: 0 auto; cursor: pointer;" onclick="document.body.scrollTo({top: document.body.scrollHeight, behavior: \'smooth\'}); window.scrollTo({top: document.body.scrollHeight, behavior: \'smooth\'});">' +
-              '<strong>✅ Timer Complete!</strong> Click here or <strong>Scroll to Bottom</strong> to continue' +
-              '</div>';
+            timerBar.innerHTML = '&lt;div style="max-width: 1200px; margin: 0 auto; cursor: pointer;" onclick="document.body.scrollTo({top: document.body.scrollHeight, behavior: \'smooth\'}); window.scrollTo({top: document.body.scrollHeight, behavior: \'smooth\'});"&gt;' +
+              '&lt;strong&gt;✅ Timer Complete!&lt;/strong&gt; Click here or &lt;strong&gt;Scroll to Bottom&lt;/strong&gt; to continue' +
+              '&lt;/div&gt;';
             checkScrollPosition();
           }
         }
@@ -943,23 +947,23 @@ h3 { font-size: 1.25rem; }
           const clientHeight = document.documentElement.clientHeight;
           
           // Check if scrolled near bottom (within 100px)
-          if (scrollTop + clientHeight >= scrollHeight - 100 && !hasScrolledToBottom) {
+          if (scrollTop + clientHeight &gt;= scrollHeight - 100 &amp;&amp; !hasScrolledToBottom) {
             hasScrolledToBottom = true;
             showNextPageButton();
           }
         }
         
         function showNextPageButton() {
-          if (currentPageNum < totalPages) {
+          if (currentPageNum &lt; totalPages) {
             // Show next page button
             const nextPageUrl = verificationPages[currentPageNum] + '?session=' + sessionId;
-            nextButtonContainer.innerHTML = '<h3 style="color: #2196f3; margin-bottom: 10px;">✅ Great Job!</h3>' +
-              '<p style="color: #666; margin-bottom: 15px;">Page ' + currentPageNum + ' of ' + totalPages + ' complete</p>' +
-              '<a href="' + nextPageUrl + '" style="display: inline-block; padding: 15px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold; box-shadow: 0 4px 12px rgba(102,126,234,0.4);">Go to Page ' + (currentPageNum + 1) + ' →</a>';
+            nextButtonContainer.innerHTML = '&lt;h3 style="color: #2196f3; margin-bottom: 10px;"&gt;✅ Great Job!&lt;/h3&gt;' +
+              '&lt;p style="color: #666; margin-bottom: 15px;"&gt;Page ' + currentPageNum + ' of ' + totalPages + ' complete&lt;/p&gt;' +
+              '&lt;a href="' + nextPageUrl + '" style="display: inline-block; padding: 15px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold; box-shadow: 0 4px 12px rgba(102,126,234,0.4);"&gt;Go to Page ' + (currentPageNum + 1) + ' →&lt;/a&gt;';
             nextButtonContainer.style.display = 'block';
           } else {
             // All pages complete, redirect to verification
-            timerBar.innerHTML = '<div style="max-width: 1200px; margin: 0 auto;">🎉 <strong>ALL PAGES COMPLETE!</strong> Generating your code...</div>';
+            timerBar.innerHTML = '&lt;div style="max-width: 1200px; margin: 0 auto;"&gt;🎉 &lt;strong&gt;ALL PAGES COMPLETE!&lt;/strong&gt; Generating your code...&lt;/div&gt;';
             setTimeout(function() {
               const hostname = window.location.hostname;
               const verifyUrl = 'https://' + (hostname.includes('replit') ? hostname.replace('.app', '.dev') : hostname) + '/verify_ad?session=' + sessionId;

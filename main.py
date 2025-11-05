@@ -1218,9 +1218,6 @@ async def get_premium_command(event):
         
         session_id, ad_url = ad_monetization.generate_ad_link(event.sender_id, bot_domain)
         
-        # Add session parameter to blog URL for timer tracking
-        ad_url_with_session = f"{ad_url}?session={session_id}"
-        
         premium_text = (
             f"🎬 **Get {PREMIUM_DOWNLOADS} FREE downloads!**\n\n"
             "**How it works:**\n"
@@ -1234,7 +1231,7 @@ async def get_premium_command(event):
         )
         
         markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton.url(f"🎁 Start Verification (Visit Pages 1-5)", ad_url_with_session)]
+            [InlineKeyboardButton.url(f"🎁 Start Verification (Visit Pages 1-5)", ad_url)]
         ])
         
         # Send with video (message ID 42)
