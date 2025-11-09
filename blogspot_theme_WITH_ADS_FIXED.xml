@@ -18,20 +18,19 @@
     <link rel='preconnect' href='https://fonts.gstatic.com' crossorigin='crossorigin'/>
     <link href='https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&amp;display=swap' rel='stylesheet'/>
     
-    <!-- Preconnect to ad servers for faster loading -->
-    <link rel='preconnect' href='https://js.onclckmn.com'/>
+    <!-- Preconnect to ad servers for faster loading (Adsterra only) -->
     <link rel='preconnect' href='https://www.highperformanceformat.com'/>
     <link rel='preconnect' href='https://pl27986671.effectivegatecpm.com'/>
     <link rel='preconnect' href='https://pl27986712.effectivegatecpm.com'/>
     <link rel='preconnect' href='https://pl27986715.effectivegatecpm.com'/>
     <link rel='dns-prefetch' href='//www.highperformanceformat.com'/>
-    <link rel='dns-prefetch' href='//js.onclckmn.com'/>
     
-    <!-- OnClickA Video + In-Page Ads (Async for performance) -->
-    <script async='async' src='https://js.onclckmn.com/static/onclicka.js' data-admpid='388593'></script>
-    
-    <!-- OnClickA Banner Ads -->
-    <script async='async' src='https://js.onclckmn.com/banner-admanager/oncbanner.m.js' data-onclicka-banner='388593' data-onclicka-banner-ar='c'></script>
+    <!-- Universal Canonical URL for ALL pages (removes ?m=1 mobile parameter) -->
+    <b:if cond='data:view.isPost'>
+      <link expr:href='data:post.url.canonical' rel='canonical'/>
+    <b:else/>
+      <link expr:href='data:blog.url.canonical' rel='canonical'/>
+    </b:if>
     
     <!-- SEO Meta Tags -->
     <b:if cond='data:view.isPost'>
@@ -44,7 +43,6 @@
       <meta expr:content='data:post.snippet' property='og:description'/>
       <meta content='summary_large_image' name='twitter:card'/>
       <meta expr:content='data:post.author' name='author'/>
-      <link expr:href='data:post.url.canonical' rel='canonical'/>
       <b:if cond='data:post.snippet'>
         <meta expr:content='data:post.snippet' name='description'/>
       </b:if>
@@ -55,7 +53,7 @@
       <b:if cond='data:blog.metaDescription'>
         <meta expr:content='data:blog.metaDescription' name='description'/>
       <b:else/>
-        <meta expr:content='data:blog.title + &quot; - Your source for health, fitness, and wellness information&quot;' name='description'/>
+        <meta expr:content='data:blog.title + &quot; - Your source for social media tips, tricks, and hacks that make life easy&quot;' name='description'/>
       </b:if>
     </b:if>
     
@@ -1616,77 +1614,6 @@ h3 { font-size: 1.25rem; }
                               </a>
                             </div>
                           </b:if>
-                          
-                          <!-- JavaScript to inject OnClickA horizontal banner ad in middle of article - IMPROVED -->
-                          <script type='text/javascript'>
-//<![CDATA[
-(function() {
-  // Wait for DOM to be fully ready
-  function injectMiddleAd() {
-    try {
-      var content = document.getElementById('article-content');
-      if (!content) {
-        console.warn('[Ad] Article content not found');
-        return;
-      }
-      
-      var paragraphs = content.querySelectorAll('p');
-      if (paragraphs.length < 4) {
-        console.warn('[Ad] Not enough paragraphs for middle ad');
-        return;
-      }
-      
-      var targetParagraph = paragraphs[Math.floor(paragraphs.length / 2)];
-      
-      // Create OnClickA banner container
-      var adDiv = document.createElement('div');
-      adDiv.className = 'in-article-ad';
-      adDiv.id = 'middle-article-ad';
-      adDiv.style.cssText = 'margin: 1.5rem auto; padding: 1rem; background: #f8f9fa; border-radius: 8px; text-align: center; max-width: 100%; overflow: hidden;';
-      
-      // Add OnClickA horizontal adaptive banner
-      adDiv.innerHTML = '<div data-banner-id="6097465" style="display: flex; justify-content: center; align-items: center; min-height: 90px;"></div>';
-      
-      targetParagraph.parentNode.insertBefore(adDiv, targetParagraph.nextSibling);
-      console.log('[Ad] Middle ad container injected');
-      
-      // Trigger OnClickA to load the banner with retry logic
-      function loadOnClickABanner() {
-        if (window.onclickaMini && window.onclickaMini.isInit) {
-          try {
-            window.onclickaMini.goId(6097465);
-            console.log('[Ad] OnClickA banner loaded successfully');
-          } catch(e) {
-            console.error('[Ad] OnClickA banner error:', e);
-          }
-        } else {
-          console.log('[Ad] OnClickA not ready, waiting...');
-          setTimeout(loadOnClickABanner, 500);
-        }
-      }
-      
-      // Try loading immediately or wait for event
-      if (window.onclickaMini && window.onclickaMini.isInit) {
-        loadOnClickABanner();
-      } else {
-        document.addEventListener('onclickaMini', loadOnClickABanner);
-        setTimeout(loadOnClickABanner, 1000); // Fallback timeout
-      }
-      
-    } catch(e) {
-      console.error('[Ad] Middle ad injection error:', e);
-    }
-  }
-  
-  // Run after DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', injectMiddleAd);
-  } else {
-    injectMiddleAd();
-  }
-})();
-//]]>
-</script>
                           
                           <!-- IN-ARTICLE AD (After content, before footer) - Single post only - FIXED -->
                           <div class='ad-zone ad-responsive' id='ad-in-article' style='margin: 1.5rem 0;'>
