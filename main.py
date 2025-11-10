@@ -715,15 +715,55 @@ async def download_range(event):
     
     client_to_use = user_client
 
+    # Try to resolve the channel entity first (same fallback as handle_download)
     try:
-        await client_to_use.get_entity(start_chat)
-    except Exception:
-        pass
+        LOGGER(__name__).info(f"Batch download: Attempting to resolve entity for channel: {start_chat}")
+        entity = await client_to_use.get_entity(start_chat)
+        LOGGER(__name__).info(f"Batch download: Successfully resolved entity for channel: {start_chat}")
+    except ValueError as e:
+        LOGGER(__name__).error(f"Batch download: Cannot find entity {start_chat}: {e}")
+        
+        # Try to load all dialogs to populate entity cache, then try again
+        try:
+            LOGGER(__name__).info(f"Batch download: Fetching dialogs to populate entity cache for user {event.sender_id}")
+            status_msg = await event.respond("🔄 **Loading your channels... Please wait.**")
+            
+            # Get all dialogs (chats/channels) - this populates Telethon's entity cache
+            dialogs = await client_to_use.get_dialogs(limit=None)
+            LOGGER(__name__).info(f"Batch download: Loaded {len(dialogs)} dialogs for user {event.sender_id}")
+            
+            await status_msg.delete()
+            
+            # Try again after loading dialogs
+            try:
+                entity = await client_to_use.get_entity(start_chat)
+                LOGGER(__name__).info(f"Batch download: Successfully resolved entity after loading dialogs: {start_chat}")
+            except Exception as retry_error:
+                LOGGER(__name__).error(f"Batch download: Still cannot resolve entity after loading dialogs: {retry_error}")
+                await event.respond(
+                    "❌ **Cannot Access Channel**\n\n"
+                    "Your account doesn't have access to this private channel.\n\n"
+                    "**To fix this:**\n"
+                    "1. Join the private channel with your Telegram account\n"
+                    "2. Wait a few minutes for Telegram to sync\n"
+                    "3. Try the batch download again"
+                )
+                return
+        except Exception as dialog_error:
+            LOGGER(__name__).error(f"Batch download: Error loading dialogs: {dialog_error}")
+            await event.respond(
+                "❌ **Session Error**\n\n"
+                "Failed to load your channels. Please try:\n"
+                "1. `/login` again with your phone number\n"
+                "2. Wait a few minutes and try again"
+            )
+            return
 
     prefix = args[1].rsplit("/", 1)[0]
     loading = await event.respond(f"📥 **Downloading posts {start_id}–{end_id}…**")
 
     downloaded = skipped = failed = 0
+    access_error_shown = False
 
     for msg_id in range(start_id, end_id + 1):
         url = f"{prefix}/{msg_id}"
@@ -753,6 +793,20 @@ async def download_range(event):
                 )
 
         except Exception as e:
+            error_msg = str(e)
+            if "Cannot find any entity" in error_msg or "No user has" in error_msg:
+                if not access_error_shown:
+                    await loading.delete()
+                    await event.respond(
+                        "❌ **Cannot Access Channel**\n\n"
+                        "Your account lost access to this private channel during batch download.\n\n"
+                        "**To fix this:**\n"
+                        "1. Make sure you're still a member of the channel\n"
+                        "2. Try again after a few minutes\n\n"
+                        f"📊 **Progress:** {downloaded} downloaded, {skipped} skipped before error"
+                    )
+                    access_error_shown = True
+                return
             failed += 1
             LOGGER(__name__).error(f"Error at {url}: {e}")
 

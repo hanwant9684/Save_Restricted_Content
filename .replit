@@ -1,4 +1,4 @@
-modules = ["web", "python-3.11"]
+modules = ["web", "python-3.11", "postgresql-16"]
 [agent]
 expertMode = true
 
@@ -22,13 +22,13 @@ args = "telegram-bot"
 name = "telegram-bot"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python server_wsgi.py"
-waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
+waitForPort = 8000
 
 [[ports]]
 localPort = 5000
@@ -93,6 +93,10 @@ externalPort = 3001
 [[ports]]
 localPort = 45833
 externalPort = 9000
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
 
 [deployment]
 deploymentTarget = "vm"

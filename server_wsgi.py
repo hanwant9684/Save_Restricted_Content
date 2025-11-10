@@ -340,6 +340,7 @@ def application(environ, start_response):
                 files_list.sort(key=lambda x: x['size_bytes'], reverse=True)
                 
                 files_html = ''
+                editable_extensions = ('.py', '.txt', '.md', '.json', '.xml', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf', '.html', '.css', '.js')
                 for f in files_list:
                     icon = '📄'
                     if f['name'].endswith('.db'):
@@ -351,12 +352,17 @@ def application(environ, start_response):
                     elif f['name'].endswith(('.txt', '.md')):
                         icon = '📋'
                     
+                    # Add edit button for text-based files
+                    edit_button = ''
+                    if f['name'].endswith(editable_extensions):
+                        edit_button = f' <a href="/edit?file={escape(f["name"])}" class="edit-btn">✏️ Edit</a>'
+                    
                     files_html += f'''
                     <tr>
                         <td>{icon} {escape(f['name'])}</td>
                         <td>{escape(f['size'])}</td>
                         <td>{escape(f['modified'])}</td>
-                        <td><a href="/download?file={escape(f['name'])}" class="download-btn">⬇️ Download</a></td>
+                        <td><a href="/download?file={escape(f['name'])}" class="download-btn">⬇️ Download</a>{edit_button}</td>
                     </tr>'''
                 
                 html = f'''<!DOCTYPE html>
@@ -380,8 +386,10 @@ def application(environ, start_response):
         th {{ padding: 15px; text-align: left; font-weight: 600; }}
         td {{ padding: 12px 15px; border-bottom: 1px solid #e2e8f0; }}
         tr:hover {{ background: #f7fafc; }}
-        .download-btn {{ background: #48bb78; color: white; padding: 6px 16px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; transition: all 0.3s; display: inline-block; }}
+        .download-btn {{ background: #48bb78; color: white; padding: 6px 16px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; transition: all 0.3s; display: inline-block; margin-right: 5px; }}
         .download-btn:hover {{ background: #38a169; transform: translateY(-2px); }}
+        .edit-btn {{ background: #667eea; color: white; padding: 6px 16px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; transition: all 0.3s; display: inline-block; }}
+        .edit-btn:hover {{ background: #5568d3; transform: translateY(-2px); }}
         .refresh-btn {{ background: #667eea; color: white; padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: 20px; transition: all 0.3s; }}
         .refresh-btn:hover {{ background: #5568d3; transform: translateY(-2px); }}
         @media (max-width: 768px) {{
@@ -435,6 +443,176 @@ def application(environ, start_response):
             except Exception as e:
                 status = '500 Internal Server Error'
                 body = f'{{"error": "{escape(str(e))}"}}'.encode('utf-8')
+                headers = [('Content-Type', 'application/json; charset=utf-8')] + headers_common
+                start_response(status, headers)
+                return [body]
+        
+        elif path == '/edit' and method == 'GET':
+            import os
+            
+            query_string = environ.get('QUERY_STRING', '')
+            params = parse_qs(query_string)
+            filename = params.get('file', [''])[0].strip()
+            
+            if not filename:
+                status = '400 Bad Request'
+                body = b'{"error": "No file specified"}'
+                headers = [('Content-Type', 'application/json; charset=utf-8')] + headers_common
+                start_response(status, headers)
+                return [body]
+            
+            filepath = os.path.join(os.getcwd(), filename)
+            
+            if not os.path.exists(filepath) or not os.path.isfile(filepath):
+                status = '404 Not Found'
+                body = b'{"error": "File not found"}'
+                headers = [('Content-Type', 'application/json; charset=utf-8')] + headers_common
+                start_response(status, headers)
+                return [body]
+            
+            if '..' in filename or filename.startswith('/'):
+                status = '403 Forbidden'
+                body = b'{"error": "Access denied"}'
+                headers = [('Content-Type', 'application/json; charset=utf-8')] + headers_common
+                start_response(status, headers)
+                return [body]
+            
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                
+                html = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit {escape(filename)}</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }}
+        .container {{ background: white; border-radius: 20px; padding: 30px; max-width: 1400px; margin: 0 auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); }}
+        h1 {{ color: #2d3748; margin-bottom: 10px; font-size: 28px; }}
+        .subtitle {{ color: #718096; margin-bottom: 20px; font-size: 14px; }}
+        .button-group {{ margin-bottom: 20px; display: flex; gap: 10px; }}
+        .btn {{ padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s; text-decoration: none; display: inline-block; }}
+        .btn-save {{ background: #48bb78; color: white; }}
+        .btn-save:hover {{ background: #38a169; transform: translateY(-2px); }}
+        .btn-cancel {{ background: #718096; color: white; }}
+        .btn-cancel:hover {{ background: #4a5568; transform: translateY(-2px); }}
+        #editor {{ width: 100%; height: 600px; border: 2px solid #e2e8f0; border-radius: 8px; padding: 15px; font-family: 'Courier New', Monaco, monospace; font-size: 14px; line-height: 1.6; resize: vertical; }}
+        .message {{ padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; }}
+        .message.success {{ background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }}
+        .message.error {{ background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }}
+        .message.show {{ display: block; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✏️ Edit File</h1>
+        <p class="subtitle">{escape(filename)}</p>
+        
+        <div id="message" class="message"></div>
+        
+        <div class="button-group">
+            <button class="btn btn-save" onclick="saveFile()">💾 Save Changes</button>
+            <a href="/files" class="btn btn-cancel">❌ Cancel</a>
+        </div>
+        
+        <textarea id="editor">{escape(file_content)}</textarea>
+    </div>
+    
+    <script>
+        function saveFile() {{
+            const content = document.getElementById('editor').value;
+            const message = document.getElementById('message');
+            
+            fetch('/save', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/x-www-form-urlencoded' }},
+                body: 'file={escape(filename)}&content=' + encodeURIComponent(content)
+            }})
+            .then(response => response.json())
+            .then(data => {{
+                if (data.success) {{
+                    message.className = 'message success show';
+                    message.textContent = '✅ File saved successfully!';
+                    setTimeout(() => {{ message.classList.remove('show'); }}, 3000);
+                }} else {{
+                    message.className = 'message error show';
+                    message.textContent = '❌ Error: ' + data.error;
+                }}
+            }})
+            .catch(error => {{
+                message.className = 'message error show';
+                message.textContent = '❌ Failed to save file: ' + error;
+            }});
+        }}
+    </script>
+</body>
+</html>'''
+                
+                status = '200 OK'
+                body = html.encode('utf-8')
+                headers = [('Content-Type', 'text/html; charset=utf-8')] + headers_common
+                start_response(status, headers)
+                return [body]
+                
+            except Exception as e:
+                status = '500 Internal Server Error'
+                body = f'{{"error": "{escape(str(e))}"}}'.encode('utf-8')
+                headers = [('Content-Type', 'application/json; charset=utf-8')] + headers_common
+                start_response(status, headers)
+                return [body]
+        
+        elif path == '/save' and method == 'POST':
+            import os
+            
+            try:
+                content_length = int(environ.get('CONTENT_LENGTH', 0))
+                request_body = environ['wsgi.input'].read(content_length).decode('utf-8')
+                params = parse_qs(request_body)
+                
+                filename = params.get('file', [''])[0].strip()
+                content = params.get('content', [''])[0]
+                
+                if not filename:
+                    status = '400 Bad Request'
+                    body = b'{{"success": false, "error": "No file specified"}}'
+                    headers = [('Content-Type', 'application/json; charset=utf-8')] + headers_common
+                    start_response(status, headers)
+                    return [body]
+                
+                filepath = os.path.join(os.getcwd(), filename)
+                
+                if not os.path.exists(filepath) or not os.path.isfile(filepath):
+                    status = '404 Not Found'
+                    body = b'{{"success": false, "error": "File not found"}}'
+                    headers = [('Content-Type', 'application/json; charset=utf-8')] + headers_common
+                    start_response(status, headers)
+                    return [body]
+                
+                if '..' in filename or filename.startswith('/'):
+                    status = '403 Forbidden'
+                    body = b'{{"success": false, "error": "Access denied"}}'
+                    headers = [('Content-Type', 'application/json; charset=utf-8')] + headers_common
+                    start_response(status, headers)
+                    return [body]
+                
+                # Save the file
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                
+                status = '200 OK'
+                body = b'{{"success": true}}'
+                headers = [('Content-Type', 'application/json; charset=utf-8')] + headers_common
+                start_response(status, headers)
+                return [body]
+                
+            except Exception as e:
+                from logger import LOGGER
+                LOGGER(__name__).error(f"Error saving file: {e}")
+                status = '500 Internal Server Error'
+                body = f'{{"success": false, "error": "{escape(str(e))}"}}'.encode('utf-8')
                 headers = [('Content-Type', 'application/json; charset=utf-8')] + headers_common
                 start_response(status, headers)
                 return [body]
@@ -738,7 +916,14 @@ start_bot_once()
 
 if __name__ == '__main__':
     from waitress import serve
-    port = int(os.environ.get('PORT', 5000))
+    
+    # Detect Replit environment and use port 8000, otherwise use PORT env var or 5000
+    if os.getenv('REPLIT_DEV_DOMAIN') or os.getenv('REPL_ID'):
+        port = 8000
+        _logger.info("Detected Replit environment - using port 8000")
+    else:
+        port = int(os.environ.get('PORT', 5000))
+        _logger.info(f"Using port {port} for non-Replit environment")
     
     _logger.info(f"Starting Waitress WSGI server on 0.0.0.0:{port} (minimal RAM mode)")
     serve(application, host='0.0.0.0', port=port, threads=4, channel_timeout=60)
