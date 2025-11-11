@@ -31,55 +31,6 @@ class DatabaseManager:
         conn.row_factory = sqlite3.Row
         return conn
 
-    def _migrate_remove_shortener_column(self, conn, cursor):
-        """Remove shortener_index column from users table if it exists.
-        SQLite doesn't support ALTER TABLE DROP COLUMN, so we rebuild the table."""
-        try:
-            cursor.execute("PRAGMA table_info(users)")
-            columns = cursor.fetchall()
-            column_names = [col[1] for col in columns]
-            
-            if 'shortener_index' not in column_names:
-                LOGGER(__name__).info("Migration: shortener_index column already removed, skipping")
-                return
-            
-            LOGGER(__name__).info("Migration: Removing shortener_index column from users table")
-            
-            cursor.execute('''
-                CREATE TABLE users_new (
-                    user_id INTEGER PRIMARY KEY,
-                    username TEXT,
-                    first_name TEXT,
-                    last_name TEXT,
-                    user_type TEXT DEFAULT 'free',
-                    subscription_end TEXT,
-                    premium_source TEXT,
-                    joined_date TEXT NOT NULL,
-                    last_activity TEXT NOT NULL,
-                    is_banned INTEGER DEFAULT 0,
-                    session_string TEXT,
-                    custom_thumbnail TEXT,
-                    ad_downloads INTEGER DEFAULT 0,
-                    ad_downloads_reset_date TEXT
-                )
-            ''')
-            
-            cursor.execute('''
-                INSERT INTO users_new 
-                SELECT user_id, username, first_name, last_name, user_type, subscription_end, 
-                       premium_source, joined_date, last_activity, is_banned, session_string, 
-                       custom_thumbnail, ad_downloads, ad_downloads_reset_date
-                FROM users
-            ''')
-            
-            cursor.execute('DROP TABLE users')
-            cursor.execute('ALTER TABLE users_new RENAME TO users')
-            
-            LOGGER(__name__).info("Migration: Successfully removed shortener_index column")
-        except Exception as e:
-            LOGGER(__name__).error(f"Migration error: {e}")
-            raise
-
     def _init_database(self):
         with self.lock:
             conn = self._get_connection()
@@ -165,8 +116,6 @@ class DatabaseManager:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_ad_sessions_created ON ad_sessions(created_at)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_ad_verifications_created ON ad_verifications(created_at)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_legal_acceptance_date ON legal_acceptance(acceptance_date)')
-            
-            self._migrate_remove_shortener_column(conn, cursor)
             
             conn.commit()
             conn.close()

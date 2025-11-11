@@ -566,7 +566,7 @@ def application(environ, start_response):
 <body>
     <div class="container">
         <h1>📁 File Browser & Database Manager</h1>
-        <p class="subtitle">Secure Admin Panel - Replit Deployment</p>
+        <p class="subtitle">Secure Admin Panel</p>
         
         <div class="stats">
             <div class="stat-item">
