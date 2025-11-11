@@ -7,7 +7,7 @@ A Telegram bot for downloading and forwarding media from private/public channels
 - Download and forward media from Telegram channels
 - Support for multiple media types (photos, videos, documents)
 - Queue management for downloads
-- Ad monetization with URL shorteners (SwiftLnx, GPLinks, Shrtfly, UpShrink)
+- Ad monetization system (URL shortener monetization has been retired)
 - SQLite database for user and session management (portable & lightweight)
 - Premium user system
 - Admin controls and broadcasting
@@ -37,7 +37,6 @@ The bot requires the following environment variables to run. You can set them in
 - **ADMIN_USERNAME** - Bot admin username for contact
 - **PAYPAL_URL** - PayPal payment URL for premium subscriptions
 - **UPI_ID** - UPI ID for payments
-- **SWIFTLNX_API_KEY**, **GPLINKS_API_KEY**, **SHRTFLY_API_KEY**, **UPSHRINK_API_KEY** - URL shortener API keys for ad monetization
 - **SESSION_STRING** - Session string for admin downloads (optional)
 
 ## How to Run

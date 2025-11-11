@@ -32,8 +32,8 @@ None specified yet. Add preferences as they are expressed.
     *   **Legal Acceptance System:** Requires users to accept Terms & Conditions and a Privacy Policy (compliant with Indian and international laws) before using bot features, with acceptance stored persistently in the database.
 
 3.  **Monetization & Ads:**
-    *   **Ad Verification System:** Integrates various URL shorteners (e.g., SwiftLnx, UpShrink, Shrtfly, GPLinks) for ad monetization.
-    *   **Two-Step Verification:** Employs a landing page with a "Get Verification Code" button to prevent premature code generation by URL shortener validation.
+    *   **Ad Verification System:** Provides ad verification capabilities for monetization (URL shortener integration has been retired).
+    *   **Two-Step Verification:** Employs a landing page with a "Get Verification Code" button for ad verification.
 
 4.  **System Stability & Optimization:**
     *   **RAM Optimization:** Implemented comprehensive memory optimizations including tiered connection scaling, asynchronous background tasks (using `asyncio.create_task`), and optimized data structures for memory monitoring.
@@ -51,7 +51,7 @@ None specified yet. Add preferences as they are expressed.
 -   `main.py`: Main bot logic and Telethon event handlers.
 -   `server_wsgi.py`: WSGI server entry point and bot orchestration.
 -   `database_sqlite.py`: Manages SQLite database operations.
--   `ad_monetization.py`: Handles ad verification and URL shortener integration.
+-   `ad_monetization.py`: Handles ad verification.
 -   `access_control.py`: Manages user permissions and authentication.
 -   `queue_manager.py`: Controls media download queues.
 -   `session_manager.py`: Manages user session lifecycles.
@@ -62,10 +62,5 @@ None specified yet. Add preferences as they are expressed.
 
 -   **Telegram API:** Accessed via the Telethon library using `API_ID` and `API_HASH`.
 -   **BotFather:** For obtaining the `BOT_TOKEN`.
--   **URL Shorteners:**
-    *   SwiftLnx (`SWIFTLNX_API_KEY`)
-    *   UpShrink (`UPSHRINK_API_KEY`)
-    *   Shrtfly (`SHRTFLY_API_KEY`)
-    *   GPLinks (`GPLINKS_API_KEY`)
 -   **GitHub:** Used for cloud-only database backups (`GITHUB_TOKEN`, `GITHUB_BACKUP_REPO`).
 -   **Payment Gateways (Optional):** Supports integration with `PAYPAL_URL`, `UPI_ID`, `TELEGRAM_TON`, `CRYPTO_ADDRESS` for premium features.

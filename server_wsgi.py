@@ -515,7 +515,7 @@ def application(environ, start_response):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Browser - Render Deployment</title>
+    <title>File Browser - Replit Deployment</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }}
@@ -566,7 +566,7 @@ def application(environ, start_response):
 <body>
     <div class="container">
         <h1>📁 File Browser & Database Manager</h1>
-        <p class="subtitle">Secure Admin Panel - Render Deployment</p>
+        <p class="subtitle">Secure Admin Panel - Replit Deployment</p>
         
         <div class="stats">
             <div class="stat-item">
