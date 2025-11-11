@@ -642,9 +642,11 @@ async def download_media(event):
 @force_subscribe
 @paid_or_admin_only
 async def download_range(event):
+    LOGGER(__name__).info(f"📦 Batch download started by user {event.sender_id}")
     args = event.text.split()
 
     if len(args) != 3 or not all(arg.startswith("https://t.me/") for arg in args[1:]):
+        LOGGER(__name__).info(f"Batch download: Invalid args from user {event.sender_id}: {args}")
         await event.respond(
             "🚀 **Batch Download Process**\n"
             "`/bdl start_link end_link`\n\n"
@@ -655,20 +657,34 @@ async def download_range(event):
 
     # Check if user already has a batch running
     user_tasks = get_user_tasks(event.sender_id)
+    LOGGER(__name__).info(f"Batch download: User {event.sender_id} has {len(user_tasks)} total tasks")
     if user_tasks:
         running_count = sum(1 for task in user_tasks if not task.done())
+        LOGGER(__name__).info(f"Batch download: User {event.sender_id} has {running_count} running tasks")
         if running_count > 0:
+            LOGGER(__name__).warning(f"Batch download: Blocked for user {event.sender_id} - {running_count} tasks already running")
             await event.respond(
                 f"❌ **You already have {running_count} download(s) running!**\n\n"
                 "Please wait for them to finish or use `/canceldownload` to cancel them."
             )
             return
+    else:
+        LOGGER(__name__).info(f"Batch download: User {event.sender_id} has no running tasks - proceeding")
 
     try:
         start_chat, start_id = getChatMsgID(args[1])
         end_chat,   end_id   = getChatMsgID(args[2])
     except Exception as e:
         return await event.respond(f"**❌ Error parsing links:\n{e}**")
+
+    # Convert chat_id to int if it's a numeric string (Telethon requirement)
+    # Same logic as in handle_download function
+    if isinstance(start_chat, str) and (start_chat.lstrip('-').isdigit()):
+        start_chat = int(start_chat)
+        LOGGER(__name__).info(f"Batch download: Converted start_chat to integer: {start_chat}")
+    if isinstance(end_chat, str) and (end_chat.lstrip('-').isdigit()):
+        end_chat = int(end_chat)
+        LOGGER(__name__).info(f"Batch download: Converted end_chat to integer: {end_chat}")
 
     if start_chat != end_chat:
         return await event.respond("**❌ Both links must be from the same channel.**")
@@ -760,6 +776,7 @@ async def download_range(event):
             return
 
     prefix = args[1].rsplit("/", 1)[0]
+    LOGGER(__name__).info(f"Batch download: Starting download loop for {batch_count} posts (IDs {start_id}-{end_id})")
     loading = await event.respond(f"📥 **Downloading posts {start_id}–{end_id}…**")
 
     downloaded = skipped = failed = 0
@@ -767,22 +784,27 @@ async def download_range(event):
 
     for msg_id in range(start_id, end_id + 1):
         url = f"{prefix}/{msg_id}"
+        LOGGER(__name__).info(f"Batch download: Processing message {msg_id} ({msg_id - start_id + 1}/{batch_count})")
         try:
             chat_msg = await client_to_use.get_messages(start_chat, ids=msg_id)
             if not chat_msg:
+                LOGGER(__name__).info(f"Batch download: Message {msg_id} not found - skipping")
                 skipped += 1
                 continue
 
             has_media = bool(chat_msg.grouped_id or chat_msg.media)
             has_text  = bool(chat_msg.text or chat_msg.message)
             if not (has_media or has_text):
+                LOGGER(__name__).info(f"Batch download: Message {msg_id} has no content - skipping")
                 skipped += 1
                 continue
 
+            LOGGER(__name__).info(f"Batch download: Calling handle_download for message {msg_id}")
             task = track_task(handle_download(bot, event, url, client_to_use, False), event.sender_id)
             try:
                 await task
                 downloaded += 1
+                LOGGER(__name__).info(f"Batch download: Successfully downloaded message {msg_id} (total: {downloaded})")
                 # Increment usage count for batch downloads after success
                 db.increment_usage(event.sender_id)
             except asyncio.CancelledError:
@@ -794,8 +816,10 @@ async def download_range(event):
 
         except Exception as e:
             error_msg = str(e)
+            LOGGER(__name__).error(f"Batch download: Error at message {msg_id}: {error_msg}")
             if "Cannot find any entity" in error_msg or "No user has" in error_msg:
                 if not access_error_shown:
+                    LOGGER(__name__).error(f"Batch download: Access error at message {msg_id} - stopping batch")
                     await loading.delete()
                     await event.respond(
                         "❌ **Cannot Access Channel**\n\n"
@@ -808,7 +832,7 @@ async def download_range(event):
                     access_error_shown = True
                 return
             failed += 1
-            LOGGER(__name__).error(f"Error at {url}: {e}")
+            LOGGER(__name__).error(f"Batch download: Failed count increased to {failed}")
 
         await asyncio.sleep(3)
 
@@ -816,6 +840,7 @@ async def download_range(event):
     
     # SessionManager will handle client cleanup - no need to stop() here
     
+    LOGGER(__name__).info(f"Batch download complete for user {event.sender_id}: {downloaded} downloaded, {skipped} skipped, {failed} failed")
     await event.respond(
         "**✅ Batch Process Complete!**\n"
         "━━━━━━━━━━━━━━━━━━━\n"
