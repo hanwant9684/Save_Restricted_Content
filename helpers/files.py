@@ -41,48 +41,25 @@ def cleanup_download(path: str) -> None:
 
 async def cleanup_download_delayed(path: str, user_id: int, db) -> None:
     """
-    Cleanup downloaded files with tier-based wait time for proper cache/chunk clearing.
-    
-    Premium users: Faster cleanup (2 seconds) - optimized for performance
-    Free users: Longer wait (5 seconds) - ensures complete cache/chunk cleanup on Render
-    
-    This wait time allows:
-    - Telethon to complete all internal cleanup
-    - File system cache to flush properly
-    - Download chunks to be fully cleared from memory
-    - Prevents RAM spikes and crashes on constrained environments
+    Cleanup downloaded files immediately after upload completes.
+    The delay between downloads is now handled in the queue manager,
+    not during cleanup.
     
     Args:
         path: File path to cleanup
-        user_id: User ID to determine cleanup wait time
-        db: Database instance to check user type
+        user_id: User ID (kept for compatibility)
+        db: Database instance (kept for compatibility)
     """
     import asyncio
-    from config import PyroConf
     
     try:
         if not path or path is None:
             LOGGER(__name__).debug("Cleanup skipped: path is None or empty")
             return
         
-        # Get user type to determine wait time
-        user_type = db.get_user_type(user_id)
-        is_premium = user_type in ['paid', 'admin']
+        LOGGER(__name__).info(f"Cleaning Download: {os.path.basename(path)}")
         
-        # Premium users get faster cleanup, free users get longer wait
-        wait_time = PyroConf.PREMIUM_CLEANUP_WAIT if is_premium else PyroConf.FREE_CLEANUP_WAIT
-        
-        LOGGER(__name__).info(
-            f"Scheduled cleanup for {os.path.basename(path)} "
-            f"({user_type} user: {wait_time}s wait for cache/chunk clearing)"
-        )
-        
-        # Wait to ensure all cache and chunks are properly cleared
-        await asyncio.sleep(wait_time)
-        
-        # Now perform cleanup
-        LOGGER(__name__).info(f"Cleaning Download: {path}")
-        
+        # Immediate cleanup
         if os.path.exists(path):
             os.remove(path)
         if os.path.exists(path + ".temp"):
