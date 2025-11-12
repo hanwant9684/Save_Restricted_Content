@@ -70,6 +70,21 @@ class PyroConf:
     except ValueError:
         FREE_DOWNLOAD_DELAY = 15
     
+    # Intra-Request Delay Times (in seconds)
+    # Wait time BETWEEN items within a single request (media groups, batch downloads)
+    # Shorter than download delays since these are part of the same download request
+    # Premium users get minimal delay for faster batch processing
+    # Free users get moderate delay to prevent server overload
+    try:
+        PREMIUM_INTRA_DELAY = int(os.getenv("PREMIUM_INTRA_DELAY", "1"))
+    except ValueError:
+        PREMIUM_INTRA_DELAY = 1
+    
+    try:
+        FREE_INTRA_DELAY = int(os.getenv("FREE_INTRA_DELAY", "3"))
+    except ValueError:
+        FREE_INTRA_DELAY = 3
+    
     @staticmethod
     def get_app_url() -> str:
         """

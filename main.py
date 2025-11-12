@@ -24,7 +24,8 @@ from helpers.utils import (
     processMediaGroup,
     progressArgs,
     send_media,
-    safe_progress_callback
+    safe_progress_callback,
+    get_intra_request_delay
 )
 
 from helpers.transfer import download_media_fast
@@ -624,7 +625,7 @@ async def download_media(event):
         return
     
     # Check if user is premium for queue priority
-    is_premium = db.get_user_type(event.sender_id) in ['premium', 'admin']
+    is_premium = db.get_user_type(event.sender_id) in ['paid', 'admin']
     
     # Add to download queue
     download_coro = handle_download(bot, event, post_url, user_client, True)
@@ -779,6 +780,14 @@ async def download_range(event):
     LOGGER(__name__).info(f"Batch download: Starting download loop for {batch_count} posts (IDs {start_id}-{end_id})")
     loading = await event.respond(f"📥 **Downloading posts {start_id}–{end_id}…**")
 
+    # Determine user tier once for the entire batch (avoid blocking DB calls in loop)
+    try:
+        user_type = db.get_user_type(event.sender_id)
+        is_premium = user_type in ['paid', 'admin']
+    except Exception as e:
+        LOGGER(__name__).warning(f"Could not determine user tier for batch download, using free tier: {e}")
+        is_premium = False
+
     downloaded = skipped = failed = 0
     access_error_shown = False
 
@@ -834,7 +843,10 @@ async def download_range(event):
             failed += 1
             LOGGER(__name__).error(f"Batch download: Failed count increased to {failed}")
 
-        await asyncio.sleep(3)
+        # Tier-aware cooldown between batch items
+        delay = get_intra_request_delay(is_premium)
+        await asyncio.sleep(delay)
+        LOGGER(__name__).debug(f"Batch cooldown complete ({delay}s) before next item")
 
     await loading.delete()
     
@@ -1026,7 +1038,7 @@ async def global_queue_status_command(event):
 async def handle_any_message(event):
     if event.text and not event.text.startswith("/"):
         # Check if user is premium for queue priority
-        is_premium = db.get_user_type(event.sender_id) in ['premium', 'admin']
+        is_premium = db.get_user_type(event.sender_id) in ['paid', 'admin']
         
         # Check if user already has an active download (quick check before getting client)
         async with download_queue._lock:
