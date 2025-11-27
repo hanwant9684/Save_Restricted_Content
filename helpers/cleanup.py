@@ -7,7 +7,7 @@ import time
 import asyncio
 from logger import LOGGER
 
-async def cleanup_old_downloads(max_age_minutes=30):
+async def cleanup_old_downloads(max_age_minutes=45):
     """
     Clean up download folders older than max_age_minutes
     This prevents disk space and potential memory issues
@@ -45,7 +45,7 @@ async def cleanup_old_downloads(max_age_minutes=30):
     except Exception as e:
         LOGGER(__name__).error(f"Error during cleanup: {e}")
 
-async def start_periodic_cleanup(interval_minutes=30):
+async def start_periodic_cleanup(interval_minutes=45):
     """
     Background task that periodically cleans up old downloads
     Runs every interval_minutes to keep disk usage low
@@ -53,7 +53,7 @@ async def start_periodic_cleanup(interval_minutes=30):
     while True:
         try:
             await asyncio.sleep(interval_minutes * 60)
-            await cleanup_old_downloads(max_age_minutes=30)
+            await cleanup_old_downloads(max_age_minutes=45)
         except Exception as e:
             LOGGER(__name__).error(f"Error in periodic cleanup task: {e}")
             await asyncio.sleep(60)  # Wait 1 minute before retry
