@@ -2354,7 +2354,8 @@ h2[id], h3[id] {
       }
       
       // Next page click handler - opens popunder and navigates in one click
-      function handleNextPageClick(event, url) {
+      // Make it globally accessible for onclick handlers
+      window.handleNextPageClick = function(event, url) {
         event.preventDefault();
         
         try {
@@ -2372,7 +2373,7 @@ h2[id], h3[id] {
         window.location.href = url;
         
         return false;
-      }
+      };
       
       // Start timer immediately
       updateTimer();

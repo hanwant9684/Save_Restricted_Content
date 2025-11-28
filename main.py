@@ -196,7 +196,7 @@ async def start(event):
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "🚀 **Quick Start Guide:**\n\n"
         "**Step 1:** Login with your phone\n"
-        "   📱 Use: `/login +1234567890`\n\n"
+        "   📱 Use: `/login +(91)9012345678` OR `/login +919012345678`\n\n"
         "**Step 2:** Verify with OTP\n"
         "   🔐 Enter the code you receive\n\n"
         "**Step 3:** Start downloading!\n"
@@ -256,7 +256,7 @@ async def help_command(event):
             "   `/canceldownload` - Cancel current download\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "🔐 **Authentication:**\n\n"
-            "   `/login +1234567890` - Login with phone\n"
+            "   `/login +(91)9012345678` - Login with phone\n"
             "   `/verify 1 2 3 4 5` - Enter OTP code\n"
             "   `/password <2FA>` - Enter 2FA password\n"
             "   `/logout` - Logout from account\n"
@@ -300,7 +300,7 @@ async def help_command(event):
             "   `/canceldownload` - Cancel download\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "🔐 **Authentication:**\n\n"
-            "   `/login +1234567890` - Login with phone\n"
+            "   `/login +(91)9012345678` - Login with phone\n"
             "   `/verify 1 2 3 4 5` - Enter OTP code\n"
             "   `/password <2FA>` - Enter 2FA password\n"
             "   `/logout` - Logout from account\n"
@@ -349,7 +349,7 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                 await event.respond(
                     "❌ **No active session found.**\n\n"
                     "Please login with your phone number:\n"
-                    "`/login +1234567890`"
+                    "`/login +(91)9012345678` OR `/login +919012345678`"
                 )
                 return
 
@@ -460,7 +460,7 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                     return
             
             # Download media group (pass user_client for private channel access)
-            files_sent = await processMediaGroup(chat_message, bot_client, event, event.sender_id, user_client=client_to_use)
+            files_sent = await processMediaGroup(chat_message, bot_client, event, event.sender_id, user_client=client_to_use, source_url=post_url)
             
             if files_sent == 0:
                 await event.respond("**Could not extract any valid media from the media group.**")
@@ -534,6 +534,7 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                     progress_message,
                     start_time,
                     event.sender_id,
+                    source_url=post_url,
                 )
 
                 # Cleanup throttle data for this progress message
@@ -603,7 +604,7 @@ async def download_media(event):
         await event.respond(
             "❌ **No active session found.**\n\n"
             "Please login with your phone number:\n"
-            "`/login +1234567890`"
+            "`/login +(91)9012345678` OR `/login +919012345678`"
         )
         return
     elif error_code == 'slots_full':
@@ -620,7 +621,7 @@ async def download_media(event):
         await event.respond(
             "❌ **Session error occurred.**\n\n"
             "Please try logging in again:\n"
-            "`/login +1234567890`"
+            "`/login +(91)9012345678` OR `/login +919012345678`"
         )
         return
     
@@ -709,7 +710,7 @@ async def download_range(event):
         await event.respond(
             "❌ **No active session found.**\n\n"
             "Please login with your phone number:\n"
-            "`/login +1234567890`"
+            "`/login +(91)9012345678` OR `/login +919012345678`"
         )
         return
     elif error_code == 'slots_full':
@@ -726,7 +727,7 @@ async def download_range(event):
         await event.respond(
             "❌ **Session error occurred.**\n\n"
             "Please try logging in again:\n"
-            "`/login +1234567890`"
+            "`/login +(91)9012345678` OR `/login +919012345678`"
         )
         return
     
@@ -870,7 +871,7 @@ async def login_command(event):
         command = parse_command(event.text)
         if len(command) < 2:
             await event.respond(
-                "**Usage:** `/login +1234567890`\n\n"
+                "**Usage:** `/login +(91)9012345678` OR `/login +919012345678`\n\n"
                 "**Example:** `/login +919876543210`\n\n"
                 "Make sure to include country code with +"
             )
@@ -879,7 +880,7 @@ async def login_command(event):
         phone_number = command[1].strip()
 
         if not phone_number.startswith('+'):
-            await event.respond("❌ **Please include country code with + sign.**\n\n**Example:** `/login +1234567890`")
+            await event.respond("❌ **Please include country code with + sign.**\n\n**Example:** `/login +(91)9012345678` OR `/login +919012345678`")
             return
 
         # Send OTP
@@ -1069,7 +1070,7 @@ async def handle_any_message(event):
             await event.respond(
                 "❌ **No active session found.**\n\n"
                 "Please login with your phone number:\n"
-                "`/login +1234567890`"
+                "`/login +(91)9012345678` OR `/login +919012345678`"
             )
             return
         elif error_code == 'slots_full':
@@ -1085,7 +1086,7 @@ async def handle_any_message(event):
             await event.respond(
                 "❌ **Session error occurred.**\n\n"
                 "Please try logging in again:\n"
-                "`/login +1234567890`"
+                "`/login +(91)9012345678` OR `/login +919012345678`"
             )
             return
         
