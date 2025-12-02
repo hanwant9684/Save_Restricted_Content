@@ -736,12 +736,17 @@ async def send_media(
         return True
 
 
+PER_FILE_TIMEOUT_SECONDS = 2700
+
 async def processMediaGroup(chat_message, bot, message, user_id=None, user_client=None, source_url=None):
     """Process and download a media group (multiple files in one post)
     
     ONE-AT-A-TIME APPROACH: Downloads and uploads each file sequentially to minimize RAM usage.
     Uses send_media() helper to preserve all safeguards (size checks, fast uploads, thumbnails, dump channel).
     Files are deleted immediately after upload to free memory.
+    
+    PER-FILE TIMEOUT: Each file gets its own 45-minute timeout instead of sharing one
+    timeout for the entire media group. This ensures large files don't starve smaller ones.
     
     Args:
         chat_message: The Telegram message containing the media group
@@ -796,13 +801,16 @@ async def processMediaGroup(chat_message, bot, message, user_id=None, user_clien
     )
 
     # Process each file one at a time: download → upload (via send_media) → delete → next
+    # Each file gets its own 45-minute timeout (PER_FILE_TIMEOUT_SECONDS)
     for idx, msg in enumerate(grouped_messages, 1):
         if msg.media or msg.photo or msg.video or msg.document or msg.audio:
             media_path = None
+            file_start_time = time()
+            
             try:
                 # Update progress
                 await progress_message.edit(
-                    f"📥 Processing file {idx}/{total_files}..."
+                    f"📥 Processing file {idx}/{total_files} (45min timeout per file)..."
                 )
                 
                 # Get filename from message
@@ -810,71 +818,109 @@ async def processMediaGroup(chat_message, bot, message, user_id=None, user_clien
                 # Use message.id as folder_id to group all media group files together
                 download_path = get_download_path(message.id, filename)
                 
-                # STEP 1: Download this file
-                LOGGER(__name__).info(f"Downloading file {idx}/{total_files}: {filename}")
-                media_path = await download_media_fast(
-                    client=client_for_download,
-                    message=msg,
-                    file=download_path,
-                    progress_callback=lambda c, t: safe_progress_callback(
-                        c, t, *progressArgs(f"📥 Download {idx}/{total_files}", progress_message, start_time)
+                # Wrap file processing in per-file timeout
+                async def process_single_file():
+                    nonlocal media_path
+                    
+                    # STEP 1: Download this file
+                    LOGGER(__name__).info(f"Downloading file {idx}/{total_files}: {filename} (45min timeout)")
+                    media_path = await download_media_fast(
+                        client=client_for_download,
+                        message=msg,
+                        file=download_path,
+                        progress_callback=lambda c, t: safe_progress_callback(
+                            c, t, *progressArgs(f"📥 Download {idx}/{total_files}", progress_message, start_time)
+                        )
                     )
-                )
+                    
+                    if not media_path:
+                        LOGGER(__name__).warning(f"File {idx}/{total_files} download failed: no media path returned")
+                        return False
+                    
+                    # Determine media type (same logic as in main.py)
+                    media_type = (
+                        "photo"
+                        if msg.photo
+                        else "video"
+                        if msg.video
+                        else "audio"
+                        if msg.audio
+                        else "document"
+                    )
+                    
+                    # Get caption (preserve formatting)
+                    caption_text = msg.text or ""
+                    upload_caption = caption_text
+                    
+                    # STEP 2: Upload this file using send_media (preserves all safeguards)
+                    # send_media handles: file size checks, fast uploads, thumbnails, dump channel forwarding
+                    LOGGER(__name__).info(f"Uploading file {idx}/{total_files} to user (via send_media)")
+                    upload_success = await send_media(
+                        bot=bot,
+                        message=message,
+                        media_path=media_path,
+                        media_type=media_type,
+                        caption=upload_caption,
+                        progress_message=progress_message,
+                        start_time=start_time,
+                        user_id=user_id,
+                        source_url=source_url
+                    )
+                    
+                    return upload_success
                 
-                if not media_path:
-                    LOGGER(__name__).warning(f"File {idx}/{total_files} download failed: no media path returned")
-                    continue
-                
-                # Determine media type (same logic as in main.py)
-                media_type = (
-                    "photo"
-                    if msg.photo
-                    else "video"
-                    if msg.video
-                    else "audio"
-                    if msg.audio
-                    else "document"
-                )
-                
-                # Get caption (preserve formatting)
-                caption_text = msg.text or ""
-                upload_caption = caption_text
-                
-                # STEP 2: Upload this file using send_media (preserves all safeguards)
-                # send_media handles: file size checks, fast uploads, thumbnails, dump channel forwarding
-                LOGGER(__name__).info(f"Uploading file {idx}/{total_files} to user (via send_media)")
-                upload_success = await send_media(
-                    bot=bot,
-                    message=message,
-                    media_path=media_path,
-                    media_type=media_type,
-                    caption=upload_caption,
-                    progress_message=progress_message,
-                    start_time=start_time,
-                    user_id=user_id,
-                    source_url=source_url
-                )
-                
-                # Only count as sent if upload succeeded
-                if upload_success:
-                    files_sent_count += 1
-                    LOGGER(__name__).info(f"Successfully processed file {idx}/{total_files}")
-                else:
-                    LOGGER(__name__).warning(f"File {idx}/{total_files} was not sent (rejected by size limit or other error)")
+                # Execute with per-file timeout (45 minutes)
+                try:
+                    upload_success = await asyncio.wait_for(
+                        process_single_file(),
+                        timeout=PER_FILE_TIMEOUT_SECONDS
+                    )
+                    
+                    # Only count as sent if upload succeeded
+                    if upload_success:
+                        files_sent_count += 1
+                        elapsed = time() - file_start_time
+                        LOGGER(__name__).info(f"Successfully processed file {idx}/{total_files} in {elapsed:.1f}s")
+                    else:
+                        LOGGER(__name__).warning(f"File {idx}/{total_files} was not sent (rejected by size limit or other error)")
+                        
+                except asyncio.TimeoutError:
+                    elapsed = time() - file_start_time
+                    LOGGER(__name__).error(
+                        f"PER-FILE TIMEOUT: File {idx}/{total_files} timed out after {elapsed:.1f}s "
+                        f"(limit: {PER_FILE_TIMEOUT_SECONDS}s / 45min)"
+                    )
+                    try:
+                        await progress_message.edit(
+                            f"⏰ File {idx}/{total_files} timed out after 45 minutes. Moving to next file..."
+                        )
+                    except:
+                        pass
                 
                 # STEP 3: Delete the file with tier-based wait time to ensure proper cache/chunk clearing
-                try:
-                    from database_sqlite import db
-                    await cleanup_download_delayed(media_path, user_id, db)
-                    LOGGER(__name__).info(f"Cleaned up file {idx}/{total_files}: {media_path}")
-                except Exception as cleanup_err:
-                    LOGGER(__name__).warning(f"Failed to cleanup file {idx}/{total_files}: {cleanup_err}")
+                if media_path:
+                    try:
+                        from database_sqlite import db
+                        await cleanup_download_delayed(media_path, user_id, db)
+                        LOGGER(__name__).info(f"Cleaned up file {idx}/{total_files}: {media_path}")
+                    except Exception as cleanup_err:
+                        LOGGER(__name__).warning(f"Failed to cleanup file {idx}/{total_files}: {cleanup_err}")
                 
                 # STEP 4: Tier-aware cooldown between files (skip for last file)
                 if idx < total_files:
                     delay = get_intra_request_delay(is_premium)
                     await asyncio.sleep(delay)
                     LOGGER(__name__).debug(f"Cooldown complete ({delay}s) before next file")
+                
+            except asyncio.CancelledError:
+                LOGGER(__name__).info(f"File {idx}/{total_files} processing cancelled")
+                if media_path:
+                    try:
+                        from database_sqlite import db
+                        await cleanup_download_delayed(media_path, user_id, db)
+                    except:
+                        pass
+                raise
                 
             except Exception as e:
                 LOGGER(__name__).error(f"Error processing file {idx}/{total_files} from message {msg.id}: {e}")
