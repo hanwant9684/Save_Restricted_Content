@@ -161,26 +161,84 @@ class SessionManager:
             self.last_activity.clear()
             LOGGER(__name__).info("All sessions disconnected")
     
+    def update_activity(self, user_id: int):
+        """
+        Update the last activity time for a user.
+        Call this when user performs any action (download start, progress update, etc.)
+        """
+        if user_id in self.active_sessions:
+            self.last_activity[user_id] = time()
+            LOGGER(__name__).debug(f"Updated activity time for user {user_id}")
+    
+    def is_user_downloading(self, user_id: int) -> bool:
+        """
+        Check if user has an active download.
+        Used for smart session timeout - sessions with active downloads stay alive.
+        """
+        try:
+            from queue_manager import download_queue
+            return user_id in download_queue.active_downloads
+        except ImportError:
+            return False
+    
     async def cleanup_idle_sessions(self):
-        """Disconnect sessions that have been idle for too long"""
+        """
+        Smart session cleanup - Disconnect sessions that have been idle for too long.
+        
+        SMART TIMEOUT LOGIC:
+        - Sessions with ACTIVE DOWNLOADS are NEVER expired (kept alive automatically)
+        - Only sessions WITHOUT active downloads are checked for idle timeout
+        - This prevents interrupting users who are actively downloading
+        """
         current_time = time()
         disconnected_count = 0
+        kept_alive_count = 0
         
         async with self._lock:
-            # Find idle sessions
+            # Import download queue to check for active downloads
+            try:
+                from queue_manager import download_queue
+            except ImportError:
+                # SAFETY: If import fails, skip cleanup entirely to avoid
+                # accidentally disconnecting users with active downloads
+                LOGGER(__name__).warning(
+                    "Could not import download_queue - skipping session cleanup to protect active downloads"
+                )
+                return 0
+            
+            # Find idle sessions (but skip those with active downloads)
             idle_users = []
             for user_id, last_active in list(self.last_activity.items()):
                 idle_seconds = current_time - last_active
-                if idle_seconds > self.idle_timeout_seconds:
+                
+                # Check if user has an active download
+                has_active_download = (
+                    download_queue is not None and 
+                    user_id in download_queue.active_downloads
+                )
+                
+                if has_active_download:
+                    # SMART TIMEOUT: Keep session alive during active downloads
+                    # Auto-refresh the activity time to prevent timeout
+                    self.last_activity[user_id] = current_time
+                    kept_alive_count += 1
+                    LOGGER(__name__).debug(
+                        f"Session for user {user_id} kept alive - active download in progress"
+                    )
+                elif idle_seconds > self.idle_timeout_seconds:
+                    # User is truly idle (no active download and exceeded timeout)
                     idle_users.append(user_id)
             
-            # Disconnect idle sessions
+            # Disconnect truly idle sessions
             for user_id in idle_users:
                 if user_id in self.active_sessions:
                     try:
                         from memory_monitor import memory_monitor
                         idle_minutes = (current_time - self.last_activity[user_id]) / 60
-                        LOGGER(__name__).info(f"Disconnecting idle session for user {user_id} (idle for {idle_minutes:.1f} minutes)")
+                        LOGGER(__name__).info(
+                            f"Disconnecting idle session for user {user_id} "
+                            f"(idle for {idle_minutes:.1f} minutes, no active downloads)"
+                        )
                         
                         memory_monitor.track_session_cleanup(user_id)
                         await self.active_sessions[user_id].disconnect()
@@ -188,12 +246,19 @@ class SessionManager:
                         del self.last_activity[user_id]
                         disconnected_count += 1
                         
-                        memory_monitor.log_memory_snapshot("Idle Session Cleanup", f"User {user_id} idle for {idle_minutes:.1f}min")
+                        memory_monitor.log_memory_snapshot(
+                            "Idle Session Cleanup", 
+                            f"User {user_id} idle for {idle_minutes:.1f}min (no downloads)"
+                        )
                     except Exception as e:
                         LOGGER(__name__).error(f"Error disconnecting idle session {user_id}: {e}")
         
-        if disconnected_count > 0:
-            LOGGER(__name__).info(f"Cleaned up {disconnected_count} idle sessions. Active sessions: {len(self.active_sessions)}")
+        if disconnected_count > 0 or kept_alive_count > 0:
+            LOGGER(__name__).info(
+                f"Session cleanup: {disconnected_count} disconnected, "
+                f"{kept_alive_count} kept alive (active downloads). "
+                f"Total active sessions: {len(self.active_sessions)}"
+            )
         
         return disconnected_count
     
@@ -233,4 +298,16 @@ IS_CONSTRAINED = bool(
 )
 
 MAX_SESSIONS = 3 if IS_CONSTRAINED else 5
-session_manager = SessionManager(max_sessions=MAX_SESSIONS)
+
+# SMART SESSION TIMEOUT:
+# Since active downloads are now protected (never expire during download),
+# we can use shorter idle timeouts to free up slots faster for new users.
+# - Constrained environments (Replit/Render): 10 minutes idle timeout
+# - Normal deployments: 15 minutes idle timeout
+# Active downloads will keep sessions alive regardless of this timeout.
+IDLE_TIMEOUT_MINUTES = 10 if IS_CONSTRAINED else 15
+
+session_manager = SessionManager(
+    max_sessions=MAX_SESSIONS, 
+    idle_timeout_minutes=IDLE_TIMEOUT_MINUTES
+)
