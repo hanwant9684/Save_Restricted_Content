@@ -1328,9 +1328,9 @@ def run_bot():
             background_tasks.append(asyncio.create_task(start_periodic_cleanup(interval_minutes=30)))
             main.LOGGER(__name__).info("Started periodic download cleanup task")
             
-            from helpers.session_manager import session_manager
+            from helpers.session_manager import session_manager, IDLE_TIMEOUT_MINUTES
             await session_manager.start_cleanup_task()
-            main.LOGGER(__name__).info("Started periodic session cleanup task (30min idle timeout)")
+            main.LOGGER(__name__).info(f"Started periodic session cleanup task ({IDLE_TIMEOUT_MINUTES}min smart idle timeout)")
             
             background_tasks.append(asyncio.create_task(periodic_gc_task()))
             main.LOGGER(__name__).info("Started periodic garbage collection task")
