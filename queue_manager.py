@@ -163,14 +163,6 @@ class DownloadQueueManager:
             from memory_monitor import memory_monitor
             memory_monitor.log_memory_snapshot("Download Started", f"User {user_id} | Active: {len(self.active_downloads)}")
             
-            # Update session activity when download starts (smart session timeout)
-            try:
-                from helpers.session_manager import session_manager
-                session_manager.update_activity(user_id)
-                LOGGER(__name__).debug(f"Updated session activity for user {user_id} at download start")
-            except Exception as e:
-                LOGGER(__name__).debug(f"Could not update session activity: {e}")
-            
             # Properly await the coroutine with timeout to prevent hanging
             try:
                 await asyncio.wait_for(download_coro, timeout=2700)  # 45 minute timeout

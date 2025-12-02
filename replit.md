@@ -20,6 +20,7 @@ None specified yet. Add preferences as they are expressed.
 1.  **Media Handling:**
     *   **Queue Management:** Implements a download queue with concurrency control.
     *   **Efficient Media Group Downloads:** Processes media group files sequentially (download, upload, delete) to prevent high RAM usage, uploading them as individual messages rather than grouped albums for memory efficiency.
+    *   **Per-File Timeout for Media Groups (Dec 2025):** Each file in a media group now gets its own 45-minute timeout (2700 seconds) instead of sharing a single timeout for the entire group. This prevents large files from starving smaller ones and ensures each file has adequate time to complete, regardless of how many files are in the group.
     *   **Hybrid Transfer Approach (Nov 2025):**
         *   **Downloads:** Uses Telethon's native streaming (`client.iter_download()`) for single-connection, chunk-by-chunk downloads that minimize RAM usage and prevent spikes on constrained environments like Render.
         *   **Uploads:** Continues using FastTelethon with optimized parallel connections (3-6 connections based on file size) for faster upload speeds while maintaining RAM efficiency.
@@ -29,6 +30,7 @@ None specified yet. Add preferences as they are expressed.
     *   **Authentication & Access Control:** Features a user authentication and permission system, including phone-based authentication for restricted content.
     *   **Session Pooling:** Manages user sessions with a maximum of 3 concurrent sessions and a 30-minute idle timeout.
     *   **Smart Session Eviction:** Protects active downloads by only evicting idle sessions when all slots are busy, ensuring uninterrupted user experience.
+    *   **Smart Session Timeout (Dec 2025):** Sessions with active downloads are NEVER disconnected due to idle timeout. The periodic cleanup task checks `download_queue.active_downloads` before expiring any session, ensuring downloads complete successfully. Sessions are only cleaned up after downloads finish and the idle timeout expires.
     *   **Legal Acceptance System:** Requires users to accept Terms & Conditions and a Privacy Policy (compliant with Indian and international laws) before using bot features, with acceptance stored persistently in the database.
 
 3.  **Monetization & Ads:**
