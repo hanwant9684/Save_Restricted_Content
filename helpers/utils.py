@@ -818,13 +818,16 @@ async def processMediaGroup(chat_message, bot, message, user_id=None, user_clien
                 # Use message.id as folder_id to group all media group files together
                 download_path = get_download_path(message.id, filename)
                 
+                # Set expected path BEFORE download starts - ensures cleanup works even if timeout during download
+                media_path = download_path
+                
                 # Wrap file processing in per-file timeout
                 async def process_single_file():
                     nonlocal media_path
                     
                     # STEP 1: Download this file
                     LOGGER(__name__).info(f"Downloading file {idx}/{total_files}: {filename} (45min timeout)")
-                    media_path = await download_media_fast(
+                    result_path = await download_media_fast(
                         client=client_for_download,
                         message=msg,
                         file=download_path,
@@ -832,6 +835,7 @@ async def processMediaGroup(chat_message, bot, message, user_id=None, user_clien
                             c, t, *progressArgs(f"📥 Download {idx}/{total_files}", progress_message, start_time)
                         )
                     )
+                    media_path = result_path  # Update with actual result
                     
                     if not media_path:
                         LOGGER(__name__).warning(f"File {idx}/{total_files} download failed: no media path returned")
