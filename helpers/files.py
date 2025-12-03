@@ -39,7 +39,7 @@ def cleanup_download(path: str) -> None:
     except Exception as e:
         LOGGER(__name__).error(f"Cleanup failed for {path}: {e}")
 
-async def cleanup_download_delayed(path: str, user_id: int, db) -> None:
+async def cleanup_download_delayed(path: str, user_id: Optional[int], db) -> None:
     """
     Cleanup downloaded files immediately after upload completes.
     The delay between downloads is now handled in the queue manager,
@@ -120,40 +120,105 @@ async def fileSizeLimit(file_size, message, action_type="download", is_premium=F
 
 def cleanup_orphaned_files() -> tuple[int, int]:
     """
-    Emergency cleanup of orphaned files from crashes.
-    Removes:
-    - All files in downloads/ folder
-    - Media files in root directory (MOV, MP4, MKV, AVI, JPG, PNG)
-    - Temp files
+    Smart cleanup of orphaned files from crashes or stuck downloads.
+    
+    Strategy:
+    - Files in folders of users with ACTIVE downloads: NEVER touch (protects uploads too)
+    - Files in folders of users with NO active download: Delete if older than 45 min
+    - Always clean media files in root directory
+    
+    Why folder-based approach?
+    - During download: file is being written (mod time updates)
+    - During upload: file is only READ (mod time stays same!)
+    - Using 45-min threshold alone could delete files during long uploads
+    - By checking user folders, we protect entire download+upload cycle
     
     Returns: (files_removed, bytes_freed)
     """
+    import time
+    
+    STALE_THRESHOLD = 45 * 60  # 45 minutes - matches per-file timeout
+    
     try:
         files_removed = 0
         bytes_freed = 0
+        now = time.time()
         
-        # Cleanup downloads folder
+        # Get set of user IDs with active downloads
+        active_user_ids = set()
+        try:
+            from queue_manager import download_queue
+            active_user_ids = set(download_queue.active_downloads)
+            if active_user_ids:
+                LOGGER(__name__).debug(f"Active download users: {active_user_ids}")
+        except ImportError:
+            LOGGER(__name__).warning("Could not import queue_manager")
+        except Exception as e:
+            LOGGER(__name__).warning(f"Could not check active downloads: {e}")
+        
+        # Clean downloads folder - process each user folder separately
         if os.path.exists("downloads"):
-            for root, dirs, files in os.walk("downloads", topdown=False):
-                for file in files:
-                    filepath = os.path.join(root, file)
-                    try:
-                        size = os.path.getsize(filepath)
-                        os.remove(filepath)
-                        files_removed += 1
-                        bytes_freed += size
-                        LOGGER(__name__).debug(f"Removed orphaned file: {filepath}")
-                    except Exception as e:
-                        LOGGER(__name__).warning(f"Failed to remove {filepath}: {e}")
+            # First, get list of user folders
+            try:
+                user_folders = [d for d in os.listdir("downloads") 
+                               if os.path.isdir(os.path.join("downloads", d))]
+            except Exception as e:
+                LOGGER(__name__).warning(f"Failed to list downloads folder: {e}")
+                user_folders = []
+            
+            for user_folder in user_folders:
+                user_path = os.path.join("downloads", user_folder)
                 
-                # Remove empty folders
-                for dir in dirs:
-                    dirpath = os.path.join(root, dir)
-                    try:
-                        if not os.listdir(dirpath):
-                            os.rmdir(dirpath)
-                    except:
-                        pass
+                # Check if this user has an active download
+                try:
+                    user_id = int(user_folder)
+                    if user_id in active_user_ids:
+                        LOGGER(__name__).debug(
+                            f"⏭️ Skipping folder for active user {user_id}"
+                        )
+                        continue  # Skip entire folder - user is downloading or uploading
+                except ValueError:
+                    pass  # Not a user ID folder, process normally
+                
+                # Process files in this folder (user has no active download)
+                for root, dirs, files in os.walk(user_path, topdown=False):
+                    for file in files:
+                        filepath = os.path.join(root, file)
+                        try:
+                            stat = os.stat(filepath)
+                            file_age = now - stat.st_mtime
+                            size = stat.st_size
+                            
+                            # Delete if file is stale (45+ minutes old)
+                            if file_age > STALE_THRESHOLD:
+                                os.remove(filepath)
+                                files_removed += 1
+                                bytes_freed += size
+                                LOGGER(__name__).info(
+                                    f"Removed stale file ({file_age/60:.1f}min old): {filepath}"
+                                )
+                            else:
+                                LOGGER(__name__).debug(
+                                    f"Keeping recent file: {filepath} (age: {file_age/60:.1f}min)"
+                                )
+                        except Exception as e:
+                            LOGGER(__name__).warning(f"Failed to check/remove {filepath}: {e}")
+                    
+                    # Remove empty subfolders
+                    for dir in dirs:
+                        dirpath = os.path.join(root, dir)
+                        try:
+                            if not os.listdir(dirpath):
+                                os.rmdir(dirpath)
+                        except:
+                            pass
+                
+                # Remove user folder if empty
+                try:
+                    if not os.listdir(user_path):
+                        os.rmdir(user_path)
+                except:
+                    pass
         
         # Cleanup media files in root directory (from crashes)
         media_extensions = ['*.MOV', '*.mov', '*.MP4', '*.mp4', '*.MKV', '*.mkv', 

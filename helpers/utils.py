@@ -204,6 +204,26 @@ class ProgressThrottle:
     """
     def __init__(self):
         self.message_throttles = {}  # message_id -> throttle data
+        self._last_sweep = time()
+        self._sweep_interval = 300  # Sweep every 5 minutes
+        self._max_age = 3600  # Remove entries older than 1 hour
+    
+    def _sweep_stale_entries(self, now):
+        """Remove stale throttle entries to prevent memory accumulation"""
+        if now - self._last_sweep < self._sweep_interval:
+            return
+        
+        self._last_sweep = now
+        stale_keys = []
+        for msg_id, data in self.message_throttles.items():
+            if now - data.get('last_update_time', 0) > self._max_age:
+                stale_keys.append(msg_id)
+        
+        for key in stale_keys:
+            del self.message_throttles[key]
+        
+        if stale_keys:
+            LOGGER(__name__).debug(f"Cleaned up {len(stale_keys)} stale progress throttle entries")
     
     def should_update(self, message_id, current, total, now):
         """
@@ -214,6 +234,8 @@ class ProgressThrottle:
         - If rate limited, exponential backoff up to 60 seconds
         - Always allow 100% completion
         """
+        self._sweep_stale_entries(now)
+        
         if message_id not in self.message_throttles:
             self.message_throttles[message_id] = {
                 'last_update_time': 0,
@@ -281,6 +303,7 @@ async def safe_progress_callback(current, total, *args):
         total: Total bytes to transfer
         *args: (action, progress_message, start_time, progress_bar_template, filled_char, empty_char)
     """
+    progress_message = None
     try:
         # Unpack args
         action = args[0] if len(args) > 0 else "Progress"
