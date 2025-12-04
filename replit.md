@@ -31,6 +31,12 @@ None specified yet. Add preferences as they are expressed.
     *   **Session Pooling:** Manages user sessions with a maximum of 3 concurrent sessions and a 30-minute idle timeout.
     *   **Smart Session Eviction:** Protects active downloads by only evicting idle sessions when all slots are busy, ensuring uninterrupted user experience.
     *   **Smart Session Timeout (Dec 2025):** Sessions with active downloads are NEVER disconnected due to idle timeout. The periodic cleanup task checks `download_queue.active_downloads` before expiring any session, ensuring downloads complete successfully. Sessions are only cleaned up after downloads finish and the idle timeout expires.
+    *   **Batch Download Session Protection (Dec 2025):** Fixed critical bug where batch downloads (`/bdl` command) would fail after 10 minutes because the session was disconnected due to "idle" timeout. The fix includes:
+        *   **Reference-Counted Active Downloads:** Implemented `add_active_download()` and `remove_active_download()` methods in `queue_manager.py` that use reference counting instead of simple set add/discard. This allows both batch downloads AND individual downloads within the batch to hold references - user is only removed from `active_downloads` when ALL references are released.
+        *   Registers users in `active_downloads` (ref-counted) at the start of batch download
+        *   Updates the session's `last_activity` timestamp for each message in the loop
+        *   Uses `try/finally` to ensure cleanup when batch completes or fails
+        *   This prevents the session manager from disconnecting "idle" sessions during long batch downloads, even when individual downloads complete within the batch
     *   **Legal Acceptance System:** Requires users to accept Terms & Conditions and a Privacy Policy (compliant with Indian and international laws) before using bot features, with acceptance stored persistently in the database.
 
 3.  **Monetization & Ads:**

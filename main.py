@@ -800,88 +800,105 @@ async def download_range(event):
     access_error_shown = False
     processed_media_groups = set()  # Track already-processed media group IDs to avoid duplicates
 
-    for msg_id in range(start_id, end_id + 1):
-        url = f"{prefix}/{msg_id}"
-        LOGGER(__name__).info(f"Batch download: Processing message {msg_id} ({msg_id - start_id + 1}/{batch_count})")
-        try:
-            chat_msg = await client_to_use.get_messages(start_chat, ids=msg_id)
-            if not chat_msg:
-                LOGGER(__name__).info(f"Batch download: Message {msg_id} not found - skipping")
-                skipped += 1
-                continue
+    # CRITICAL FIX: Register user in active_downloads to prevent session timeout during batch
+    # This prevents the session manager from disconnecting "idle" sessions during long batch downloads
+    # Uses reference counting so individual downloads in batch don't remove the batch's hold
+    from queue_manager import download_queue
+    from helpers.session_manager import session_manager
+    download_queue.add_active_download(event.sender_id)
+    LOGGER(__name__).info(f"Batch download: Registered user {event.sender_id} in active_downloads (ref-counted) to prevent session timeout")
 
-            has_media = bool(chat_msg.grouped_id or chat_msg.media)
-            has_text  = bool(chat_msg.text or chat_msg.message)
-            if not (has_media or has_text):
-                LOGGER(__name__).info(f"Batch download: Message {msg_id} has no content - skipping")
-                skipped += 1
-                continue
-
-            # Check if this message belongs to a media group we already processed
-            current_grouped_id = getattr(chat_msg, 'grouped_id', None)
-            if current_grouped_id:
-                if current_grouped_id in processed_media_groups:
-                    LOGGER(__name__).info(f"Batch download: Message {msg_id} belongs to already-processed media group {current_grouped_id} - skipping")
+    try:
+        for msg_id in range(start_id, end_id + 1):
+            url = f"{prefix}/{msg_id}"
+            LOGGER(__name__).info(f"Batch download: Processing message {msg_id} ({msg_id - start_id + 1}/{batch_count})")
+            
+            # Keep session alive by updating last_activity timestamp periodically
+            if event.sender_id in session_manager.last_activity:
+                session_manager.last_activity[event.sender_id] = time()
+            
+            try:
+                chat_msg = await client_to_use.get_messages(start_chat, ids=msg_id)
+                if not chat_msg:
+                    LOGGER(__name__).info(f"Batch download: Message {msg_id} not found - skipping")
                     skipped += 1
                     continue
-                LOGGER(__name__).info(f"Batch download: Processing new media group {current_grouped_id} starting from message {msg_id}")
 
-            LOGGER(__name__).info(f"Batch download: Calling handle_download for message {msg_id}")
-            task = track_task(handle_download(bot, event, url, client_to_use, False), event.sender_id)
-            try:
-                await task
-                downloaded += 1
-                # Mark media group as processed AFTER successful download (not before)
+                has_media = bool(chat_msg.grouped_id or chat_msg.media)
+                has_text  = bool(chat_msg.text or chat_msg.message)
+                if not (has_media or has_text):
+                    LOGGER(__name__).info(f"Batch download: Message {msg_id} has no content - skipping")
+                    skipped += 1
+                    continue
+
+                # Check if this message belongs to a media group we already processed
+                current_grouped_id = getattr(chat_msg, 'grouped_id', None)
                 if current_grouped_id:
-                    processed_media_groups.add(current_grouped_id)
-                    LOGGER(__name__).info(f"Batch download: Media group {current_grouped_id} marked as processed after successful download")
-                LOGGER(__name__).info(f"Batch download: Successfully downloaded message {msg_id} (total: {downloaded})")
-                # Increment usage count for batch downloads after success
-                db.increment_usage(event.sender_id)
-            except asyncio.CancelledError:
-                await loading.delete()
-                # SessionManager will handle client cleanup - no need to stop() here
-                return await event.respond(
-                    f"**❌ Batch canceled** after downloading `{downloaded}` posts."
-                )
+                    if current_grouped_id in processed_media_groups:
+                        LOGGER(__name__).info(f"Batch download: Message {msg_id} belongs to already-processed media group {current_grouped_id} - skipping")
+                        skipped += 1
+                        continue
+                    LOGGER(__name__).info(f"Batch download: Processing new media group {current_grouped_id} starting from message {msg_id}")
 
-        except Exception as e:
-            error_msg = str(e)
-            LOGGER(__name__).error(f"Batch download: Error at message {msg_id}: {error_msg}")
-            if "Cannot find any entity" in error_msg or "No user has" in error_msg:
-                if not access_error_shown:
-                    LOGGER(__name__).error(f"Batch download: Access error at message {msg_id} - stopping batch")
+                LOGGER(__name__).info(f"Batch download: Calling handle_download for message {msg_id}")
+                task = track_task(handle_download(bot, event, url, client_to_use, False), event.sender_id)
+                try:
+                    await task
+                    downloaded += 1
+                    # Mark media group as processed AFTER successful download (not before)
+                    if current_grouped_id:
+                        processed_media_groups.add(current_grouped_id)
+                        LOGGER(__name__).info(f"Batch download: Media group {current_grouped_id} marked as processed after successful download")
+                    LOGGER(__name__).info(f"Batch download: Successfully downloaded message {msg_id} (total: {downloaded})")
+                    # Increment usage count for batch downloads after success
+                    db.increment_usage(event.sender_id)
+                except asyncio.CancelledError:
                     await loading.delete()
-                    await event.respond(
-                        "❌ **Cannot Access Channel**\n\n"
-                        "Your account lost access to this private channel during batch download.\n\n"
-                        "**To fix this:**\n"
-                        "1. Make sure you're still a member of the channel\n"
-                        "2. Try again after a few minutes\n\n"
-                        f"📊 **Progress:** {downloaded} downloaded, {skipped} skipped before error"
+                    # SessionManager will handle client cleanup - no need to stop() here
+                    return await event.respond(
+                        f"**❌ Batch canceled** after downloading `{downloaded}` posts."
                     )
-                    access_error_shown = True
-                return
-            failed += 1
-            LOGGER(__name__).error(f"Batch download: Failed count increased to {failed}")
 
-        # Tier-aware cooldown between batch items
-        delay = get_intra_request_delay(is_premium)
-        await asyncio.sleep(delay)
-        LOGGER(__name__).debug(f"Batch cooldown complete ({delay}s) before next item")
+            except Exception as e:
+                error_msg = str(e)
+                LOGGER(__name__).error(f"Batch download: Error at message {msg_id}: {error_msg}")
+                if "Cannot find any entity" in error_msg or "No user has" in error_msg:
+                    if not access_error_shown:
+                        LOGGER(__name__).error(f"Batch download: Access error at message {msg_id} - stopping batch")
+                        await loading.delete()
+                        await event.respond(
+                            "❌ **Cannot Access Channel**\n\n"
+                            "Your account lost access to this private channel during batch download.\n\n"
+                            "**To fix this:**\n"
+                            "1. Make sure you're still a member of the channel\n"
+                            "2. Try again after a few minutes\n\n"
+                            f"📊 **Progress:** {downloaded} downloaded, {skipped} skipped before error"
+                        )
+                        access_error_shown = True
+                    return
+                failed += 1
+                LOGGER(__name__).error(f"Batch download: Failed count increased to {failed}")
 
-    await loading.delete()
-    
-    # SessionManager will handle client cleanup - no need to stop() here
-    
-    LOGGER(__name__).info(f"Batch download complete for user {event.sender_id}: {downloaded} downloaded, {skipped} skipped, {failed} failed")
-    await event.respond(
-        "**✅ Batch Process Complete!**\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"📥 **Downloaded** : `{downloaded}` post(s)\n"
-        f"⏭️ **Skipped**    : `{skipped}` (no content)\n"
-        f"❌ **Failed**     : `{failed}` error(s)"
-    )
+            # Tier-aware cooldown between batch items
+            delay = get_intra_request_delay(is_premium)
+            await asyncio.sleep(delay)
+            LOGGER(__name__).debug(f"Batch cooldown complete ({delay}s) before next item")
+
+        await loading.delete()
+        
+        LOGGER(__name__).info(f"Batch download complete for user {event.sender_id}: {downloaded} downloaded, {skipped} skipped, {failed} failed")
+        await event.respond(
+            "**✅ Batch Process Complete!**\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"📥 **Downloaded** : `{downloaded}` post(s)\n"
+            f"⏭️ **Skipped**    : `{skipped}` (no content)\n"
+            f"❌ **Failed**     : `{failed}` error(s)"
+        )
+    finally:
+        # CRITICAL: Always remove user from active_downloads when batch completes or fails
+        # Uses reference counting so this only removes the batch's hold, not individual download holds
+        download_queue.remove_active_download(event.sender_id)
+        LOGGER(__name__).info(f"Batch download: Removed user {event.sender_id} from active_downloads (ref-counted)")
 
 # Phone authentication commands
 @bot.on(events.NewMessage(pattern='/login', incoming=True, func=lambda e: e.is_private))

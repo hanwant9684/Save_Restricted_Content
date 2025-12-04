@@ -29,12 +29,12 @@ class DownloadQueueManager:
         self.max_queue = max_queue
         
         self.active_downloads: Set[int] = set()
+        self._active_download_refs: Dict[int, int] = {}
         self.waiting_queue: list[QueueItem] = []
         
         self.user_queue_positions: Dict[int, QueueItem] = {}
         self.active_tasks: Dict[int, asyncio.Task] = {}
         
-        # Track when users can download again (user_id -> timestamp)
         self.user_cooldowns: Dict[int, float] = {}
         
         self._lock = asyncio.Lock()
@@ -42,6 +42,33 @@ class DownloadQueueManager:
         self._processor_task: Optional[asyncio.Task] = None
         
         LOGGER(__name__).info(f"Queue Manager initialized: {max_concurrent} concurrent, {max_queue} max queue")
+    
+    def add_active_download(self, user_id: int) -> None:
+        """
+        Add user to active_downloads with reference counting.
+        Multiple calls increment the reference count - user is only removed when count reaches 0.
+        This allows batch downloads to hold a reference while individual downloads also hold references.
+        """
+        self.active_downloads.add(user_id)
+        self._active_download_refs[user_id] = self._active_download_refs.get(user_id, 0) + 1
+        LOGGER(__name__).debug(f"Active download ref added for user {user_id}: count={self._active_download_refs[user_id]}")
+    
+    def remove_active_download(self, user_id: int) -> None:
+        """
+        Remove user from active_downloads with reference counting.
+        Decrements the reference count - user is only removed from set when count reaches 0.
+        """
+        if user_id in self._active_download_refs:
+            self._active_download_refs[user_id] -= 1
+            if self._active_download_refs[user_id] <= 0:
+                self.active_downloads.discard(user_id)
+                del self._active_download_refs[user_id]
+                LOGGER(__name__).debug(f"Active download removed for user {user_id}: no more refs")
+            else:
+                LOGGER(__name__).debug(f"Active download ref removed for user {user_id}: count={self._active_download_refs[user_id]}")
+        else:
+            self.active_downloads.discard(user_id)
+            LOGGER(__name__).debug(f"Active download removed for user {user_id}: was not ref-counted")
     
     async def start_processor(self):
         if not self._processing:
@@ -135,7 +162,7 @@ class DownloadQueueManager:
                 # Don't send queue message - only show completion message
                 return True, None
             else:
-                self.active_downloads.add(user_id)
+                self.add_active_download(user_id)
                 task = asyncio.create_task(self._execute_download(user_id, download_coro, message))
                 self.active_tasks[user_id] = task
                 
@@ -187,7 +214,7 @@ class DownloadQueueManager:
                 pass
         finally:
             async with self._lock:
-                self.active_downloads.discard(user_id)
+                self.remove_active_download(user_id)
                 self.active_tasks.pop(user_id, None)
             
             # Force garbage collection to free memory immediately after download
@@ -225,7 +252,7 @@ class DownloadQueueManager:
                         if user_id in self.active_downloads:
                             continue
                         
-                        self.active_downloads.add(user_id)
+                        self.add_active_download(user_id)
                         
                         # Don't send download start message - only show completion message
                         # try:
@@ -305,7 +332,7 @@ class DownloadQueueManager:
                 task = self.active_tasks.get(user_id)
                 if task and not task.done():
                     task.cancel()
-                self.active_downloads.discard(user_id)
+                self.remove_active_download(user_id)
                 self.active_tasks.pop(user_id, None)
                 return True, "✅ **Active download cancelled!**"
             
@@ -327,6 +354,7 @@ class DownloadQueueManager:
                     cancelled += 1
             
             self.active_downloads.clear()
+            self._active_download_refs.clear()  # Clear reference counts too
             self.active_tasks.clear()
             
             cancelled += len(self.waiting_queue)
@@ -369,7 +397,7 @@ class DownloadQueueManager:
                 if task.done() or task.cancelled():
                     orphaned_users.append(user_id)
                     self.active_tasks.pop(user_id, None)
-                    self.active_downloads.discard(user_id)
+                    self.remove_active_download(user_id)
                     task_cleanup_count += 1
                     LOGGER(__name__).warning(f"Cleaned up orphaned task for user {user_id}")
             
