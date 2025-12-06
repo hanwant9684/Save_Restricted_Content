@@ -473,15 +473,16 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                 user_type = db.get_user_type(event.sender_id)
                 if user_type == 'free':
                     # Free users: show buttons for ads and upgrade with remaining downloads count
-                    user = db.get_user(event.sender_id)
-                    ad_downloads_left = user.get('ad_downloads', 0) if user else 0
+                    # Get both ad downloads and daily free downloads, add them together
+                    remaining = db.get_free_downloads_remaining(event.sender_id)
+                    total_left = remaining['total']  # ad_downloads + daily_remaining
                     
                     upgrade_keyboard = InlineKeyboardMarkup([
                         [InlineKeyboardButton.callback(f"🎁 Watch Ad & Get {PREMIUM_DOWNLOADS} Downloads", "watch_ad_now")],
                         [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
                     ])
                     
-                    remaining_msg = f"\n📊 **{ad_downloads_left} free download(s) remaining**" if ad_downloads_left > 0 else "\n📊 **0 free downloads remaining**"
+                    remaining_msg = f"\n📊 **{total_left} free download(s) remaining**" if total_left > 0 else "\n📊 **0 free downloads remaining**"
                     
                     await event.respond(
                         f"✅ **Download complete**{remaining_msg}",
@@ -554,15 +555,16 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                     
                     user_type = db.get_user_type(event.sender_id)
                     if user_type == 'free':
-                        user = db.get_user(event.sender_id)
-                        ad_downloads_left = user.get('ad_downloads', 0) if user else 0
+                        # Get both ad downloads and daily free downloads, add them together
+                        remaining = db.get_free_downloads_remaining(event.sender_id)
+                        total_left = remaining['total']  # ad_downloads + daily_remaining
                         
                         upgrade_markup = InlineKeyboardMarkup([
                             [InlineKeyboardButton.callback(f"🎁 Watch Ad & Get {PREMIUM_DOWNLOADS} Downloads", "watch_ad_now")],
                             [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
                         ])
                         
-                        remaining_msg = f"\n📊 **{ad_downloads_left} free download(s) remaining**" if ad_downloads_left > 0 else "\n📊 **0 free downloads remaining**"
+                        remaining_msg = f"\n📊 **{total_left} free download(s) remaining**" if total_left > 0 else "\n📊 **0 free downloads remaining**"
                         
                         await event.respond(
                             f"✅ **Download complete**{remaining_msg}",

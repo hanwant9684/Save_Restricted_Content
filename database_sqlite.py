@@ -809,6 +809,36 @@ class DatabaseManager:
             LOGGER(__name__).error(f"Error getting ad downloads for {user_id}: {e}")
             return 0
 
+    def get_free_downloads_remaining(self, user_id: int) -> dict:
+        """
+        Get both ad downloads and daily free downloads remaining for a user.
+        
+        Returns:
+            dict: {
+                'ad_downloads': int (downloads earned from watching ads),
+                'daily_remaining': int (5 - daily_usage),
+                'total': int (ad_downloads + daily_remaining)
+            }
+        """
+        try:
+            # Get ad downloads (earned from watching ads)
+            self.reset_ad_downloads_if_needed(user_id)
+            user = self.get_user(user_id)
+            ad_downloads = user.get('ad_downloads', 0) if user else 0
+            
+            # Calculate remaining from daily free limit (5 per day)
+            daily_usage = self.get_daily_usage(user_id)
+            daily_remaining = max(0, 5 - daily_usage)
+            
+            return {
+                'ad_downloads': ad_downloads,
+                'daily_remaining': daily_remaining,
+                'total': ad_downloads + daily_remaining
+            }
+        except Exception as e:
+            LOGGER(__name__).error(f"Error getting free downloads remaining for {user_id}: {e}")
+            return {'ad_downloads': 0, 'daily_remaining': 0, 'total': 0}
+
     def get_premium_users(self) -> List[Dict]:
         """Get list of all active premium users"""
         try:
