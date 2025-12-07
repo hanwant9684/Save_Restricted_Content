@@ -759,6 +759,75 @@ async def send_media(
 
 PER_FILE_TIMEOUT_SECONDS = 2700
 
+
+async def _process_single_media_file(
+    client_for_download, bot, user_message, msg, download_path, 
+    idx, total_files, progress_message, file_start_time, user_id, source_url
+):
+    """
+    Process a single file from a media group - download and upload.
+    
+    CRITICAL: This function is defined OUTSIDE processMediaGroup to prevent closure capture.
+    All parameters are passed explicitly to avoid holding references to Telethon Message objects.
+    
+    Args:
+        client_for_download: Telethon client for downloading
+        bot: Bot client for uploading to user
+        user_message: The user's original message (for reply context)
+        msg: The Telethon Message object to download (WILL BE USED AND RELEASED)
+        download_path: Path to save the downloaded file
+        idx: Current file index (1-based)
+        total_files: Total number of files
+        progress_message: Progress message to update
+        file_start_time: Start time for progress calculation
+        user_id: User ID for tracking
+        source_url: Source URL for dump channel
+        
+    Returns:
+        tuple: (result_path, upload_success)
+    """
+    # STEP 1: Download this file
+    result_path = await download_media_fast(
+        client=client_for_download,
+        message=msg,
+        file=download_path,
+        progress_callback=lambda c, t: safe_progress_callback(
+            c, t, *progressArgs(f"📥 Download {idx}/{total_files}", progress_message, file_start_time)
+        )
+    )
+    
+    if not result_path:
+        LOGGER(__name__).warning(f"File {idx}/{total_files} download failed: no media path returned")
+        return None, False
+    
+    # Determine media type from msg attributes
+    media_type = (
+        "photo" if msg.photo
+        else "video" if msg.video
+        else "audio" if msg.audio
+        else "document"
+    )
+    
+    # Get caption
+    caption_text = msg.text or ""
+    
+    # STEP 2: Upload this file
+    LOGGER(__name__).info(f"Uploading file {idx}/{total_files} to user (via send_media)")
+    upload_success = await send_media(
+        bot=bot,
+        message=user_message,
+        media_path=result_path,
+        media_type=media_type,
+        caption=caption_text,
+        progress_message=progress_message,
+        start_time=file_start_time,
+        user_id=user_id,
+        source_url=source_url
+    )
+    
+    return result_path, upload_success
+
+
 async def processMediaGroup(chat_message, bot, message, user_id=None, user_client=None, source_url=None):
     """Process and download a media group (multiple files in one post)
     
@@ -768,6 +837,10 @@ async def processMediaGroup(chat_message, bot, message, user_id=None, user_clien
     
     PER-FILE TIMEOUT: Each file gets its own 45-minute timeout instead of sharing one
     timeout for the entire media group. This ensures large files don't starve smaller ones.
+    
+    RAM OPTIMIZATION: Message objects are NOT retained in lists. We extract message IDs first,
+    then re-fetch each message individually inside the loop. This prevents Telethon from
+    caching large document objects (~4-12MB each) for the entire duration of media group processing.
     
     Args:
         chat_message: The Telegram message containing the media group
@@ -780,29 +853,44 @@ async def processMediaGroup(chat_message, bot, message, user_id=None, user_clien
     Returns:
         int: Number of files successfully downloaded and sent (0 if failed)
     """
+    from memory_monitor import memory_monitor
+    
+    # Log memory at start of media group processing
+    memory_monitor.log_memory_snapshot("MediaGroup Start", f"User {user_id or 'unknown'}: Starting media group processing")
+    
     # Use user_client to fetch messages from private/public channels
     # Fall back to bot if user_client is not provided (backward compatibility)
     client_for_download = user_client if user_client else bot
     
+    # Get the chat_id and grouped_id for later use (lightweight references)
+    chat_id = chat_message.chat_id
+    grouped_id = chat_message.grouped_id
+    
     # Get all messages in the media group
     media_group_messages = await client_for_download.get_messages(
-        chat_message.chat_id,
+        chat_id,
         ids=[chat_message.id + i for i in range(-10, 11)]
     )
     
-    # Filter to only messages in the same grouped_id
-    grouped_messages = []
-    if chat_message.grouped_id:
+    # CRITICAL RAM FIX: Extract only message IDs, then immediately clear the message list
+    # This prevents Telethon Message objects (with cached document data ~4-12MB each) 
+    # from being held in memory for the entire duration of media group processing
+    message_ids = []
+    if grouped_id:
         for msg in media_group_messages:
-            if msg and hasattr(msg, 'grouped_id') and msg.grouped_id == chat_message.grouped_id:
-                grouped_messages.append(msg)
+            if msg and hasattr(msg, 'grouped_id') and msg.grouped_id == grouped_id:
+                message_ids.append(msg.id)
     else:
-        grouped_messages = [chat_message]
+        message_ids = [chat_message.id]
     
-    # Sort by ID to maintain order
-    grouped_messages.sort(key=lambda m: m.id)
+    # Sort IDs to maintain order
+    message_ids.sort()
     
-    total_files = len(grouped_messages)
+    # CRITICAL: Clear references to message objects immediately to allow GC
+    del media_group_messages
+    gc.collect()
+    
+    total_files = len(message_ids)
     files_sent_count = 0
     
     # Determine user tier once for all files (avoid blocking DB calls in loop)
@@ -823,171 +911,149 @@ async def processMediaGroup(chat_message, bot, message, user_id=None, user_clien
 
     # Process each file one at a time: download → upload (via send_media) → delete → next
     # Each file gets its own 45-minute timeout (PER_FILE_TIMEOUT_SECONDS)
-    for idx, msg in enumerate(grouped_messages, 1):
-        if msg.media or msg.photo or msg.video or msg.document or msg.audio:
-            media_path = None
-            file_start_time = time()
+    # CRITICAL RAM FIX: We iterate over message IDs and re-fetch each message individually
+    # This prevents holding all Message objects in memory (each can be 4-12MB with cached document data)
+    for idx, msg_id in enumerate(message_ids, 1):
+        msg = None  # Will be set after fetching
+        media_path = None
+        file_start_time = time()
+        
+        try:
+            # Update progress
+            await progress_message.edit(
+                f"📥 Processing file {idx}/{total_files} (45min timeout per file)..."
+            )
             
+            # CRITICAL RAM FIX: Re-fetch the message fresh for each file
+            # This prevents closure capture and allows each message to be GC'd after processing
+            msg = await client_for_download.get_messages(chat_id, ids=msg_id)
+            
+            if not msg or not (msg.media or msg.photo or msg.video or msg.document or msg.audio):
+                LOGGER(__name__).warning(f"File {idx}/{total_files}: No media found in message {msg_id}")
+                continue
+            
+            # Get filename from message
+            filename = get_file_name(msg.id, msg)
+            # Use message.id as folder_id to group all media group files together
+            download_path = get_download_path(message.id, filename)
+            
+            # Set expected path BEFORE download starts - ensures cleanup works even if timeout during download
+            media_path = download_path
+            
+            # STEP 1 & 2: Download and upload using external helper (no closure capture)
+            LOGGER(__name__).info(f"Downloading file {idx}/{total_files}: {filename} (45min timeout)")
+            
+            # Execute with per-file timeout (45 minutes)
+            # CRITICAL: Uses external helper function to avoid closure capture
             try:
-                # Update progress
-                await progress_message.edit(
-                    f"📥 Processing file {idx}/{total_files} (45min timeout per file)..."
-                )
-                
-                # Get filename from message
-                filename = get_file_name(msg.id, msg)
-                # Use message.id as folder_id to group all media group files together
-                download_path = get_download_path(message.id, filename)
-                
-                # Set expected path BEFORE download starts - ensures cleanup works even if timeout during download
-                media_path = download_path
-                
-                # Wrap file processing in per-file timeout
-                async def process_single_file():
-                    nonlocal media_path
-                    
-                    # STEP 1: Download this file
-                    LOGGER(__name__).info(f"Downloading file {idx}/{total_files}: {filename} (45min timeout)")
-                    result_path = await download_media_fast(
-                        client=client_for_download,
-                        message=msg,
-                        file=download_path,
-                        progress_callback=lambda c, t: safe_progress_callback(
-                            c, t, *progressArgs(f"📥 Download {idx}/{total_files}", progress_message, file_start_time)
-                        )
-                    )
-                    media_path = result_path  # Update with actual result
-                    
-                    if not media_path:
-                        LOGGER(__name__).warning(f"File {idx}/{total_files} download failed: no media path returned")
-                        return False
-                    
-                    # Determine media type (same logic as in main.py)
-                    media_type = (
-                        "photo"
-                        if msg.photo
-                        else "video"
-                        if msg.video
-                        else "audio"
-                        if msg.audio
-                        else "document"
-                    )
-                    
-                    # Get caption (preserve formatting)
-                    caption_text = msg.text or ""
-                    upload_caption = caption_text
-                    
-                    # STEP 2: Upload this file using send_media (preserves all safeguards)
-                    # send_media handles: file size checks, fast uploads, thumbnails, dump channel forwarding
-                    LOGGER(__name__).info(f"Uploading file {idx}/{total_files} to user (via send_media)")
-                    upload_success = await send_media(
+                result_path, upload_success = await asyncio.wait_for(
+                    _process_single_media_file(
+                        client_for_download=client_for_download,
                         bot=bot,
-                        message=message,
-                        media_path=media_path,
-                        media_type=media_type,
-                        caption=upload_caption,
+                        user_message=message,
+                        msg=msg,
+                        download_path=download_path,
+                        idx=idx,
+                        total_files=total_files,
                         progress_message=progress_message,
-                        start_time=file_start_time,
+                        file_start_time=file_start_time,
                         user_id=user_id,
                         source_url=source_url
-                    )
-                    
-                    return upload_success
+                    ),
+                    timeout=PER_FILE_TIMEOUT_SECONDS
+                )
                 
-                # Execute with per-file timeout (45 minutes)
-                try:
-                    upload_success = await asyncio.wait_for(
-                        process_single_file(),
-                        timeout=PER_FILE_TIMEOUT_SECONDS
-                    )
-                    
-                    # Only count as sent if upload succeeded
-                    if upload_success:
-                        files_sent_count += 1
-                        elapsed = time() - file_start_time
-                        LOGGER(__name__).info(f"Successfully processed file {idx}/{total_files} in {elapsed:.1f}s")
-                    else:
-                        LOGGER(__name__).warning(f"File {idx}/{total_files} was not sent (rejected by size limit or other error)")
-                        
-                except asyncio.TimeoutError:
+                if result_path:
+                    media_path = result_path
+                
+                # Only count as sent if upload succeeded
+                if upload_success:
+                    files_sent_count += 1
                     elapsed = time() - file_start_time
-                    LOGGER(__name__).error(
-                        f"PER-FILE TIMEOUT: File {idx}/{total_files} timed out after {elapsed:.1f}s "
-                        f"(limit: {PER_FILE_TIMEOUT_SECONDS}s / 45min)"
+                    LOGGER(__name__).info(f"Successfully processed file {idx}/{total_files} in {elapsed:.1f}s")
+                else:
+                    LOGGER(__name__).warning(f"File {idx}/{total_files} was not sent (rejected by size limit or other error)")
+                    
+            except asyncio.TimeoutError:
+                elapsed = time() - file_start_time
+                LOGGER(__name__).error(
+                    f"PER-FILE TIMEOUT: File {idx}/{total_files} timed out after {elapsed:.1f}s "
+                    f"(limit: {PER_FILE_TIMEOUT_SECONDS}s / 45min)"
+                )
+                try:
+                    await progress_message.edit(
+                        f"⏰ File {idx}/{total_files} timed out after 45 minutes. Moving to next file..."
                     )
-                    try:
-                        await progress_message.edit(
-                            f"⏰ File {idx}/{total_files} timed out after 45 minutes. Moving to next file..."
-                        )
-                    except:
-                        pass
-                
-                # STEP 3: Delete the file and release RAM (critical for 512MB limit)
-                if media_path:
-                    try:
-                        from database_sqlite import db
-                        await cleanup_download_delayed(media_path, user_id, db)
-                        LOGGER(__name__).info(f"Cleaned up file {idx}/{total_files}: {os.path.basename(media_path)}")
-                    except Exception as cleanup_err:
-                        LOGGER(__name__).warning(f"Failed to cleanup file {idx}/{total_files}: {cleanup_err}")
-                    finally:
-                        # Explicitly delete reference and force garbage collection
-                        del media_path
-                        media_path = None
-                        gc.collect()
-                
-                # STEP 4: Tier-aware cooldown between files (same as single file downloads)
-                # This wait time prevents RAM spikes by allowing memory to be fully reclaimed
-                if idx < total_files:
-                    delay = get_intra_request_delay(is_premium)
-                    LOGGER(__name__).info(f"⏳ Waiting {delay}s before next file (RAM cooldown, same as single files)")
-                    await asyncio.sleep(delay)
-                    # Extra gc after delay to ensure clean state
-                    gc.collect()
-                    LOGGER(__name__).debug(f"Cooldown complete ({delay}s) - ready for file {idx+1}/{total_files}")
-                
-            except asyncio.CancelledError:
-                LOGGER(__name__).info(f"File {idx}/{total_files} processing cancelled")
-                if media_path:
-                    try:
-                        from database_sqlite import db
-                        await cleanup_download_delayed(media_path, user_id, db)
-                    except:
-                        pass
-                    finally:
-                        del media_path
-                        media_path = None
-                        gc.collect()
-                raise
-                
-            except Exception as e:
-                LOGGER(__name__).error(f"Error processing file {idx}/{total_files} from message {msg.id}: {e}")
-                # Clean up on error and release RAM
-                if media_path:
-                    try:
-                        from database_sqlite import db
-                        await cleanup_download_delayed(media_path, user_id, db)
-                    except:
-                        pass
-                    finally:
-                        del media_path
-                        media_path = None
-                        gc.collect()
-                
-                # Apply tier-aware cooldown even on error (same as single files)
-                if idx < total_files:
-                    delay = get_intra_request_delay(is_premium)
-                    LOGGER(__name__).info(f"⏳ Waiting {delay}s after error before next file")
-                    await asyncio.sleep(delay)
-                    gc.collect()
-                
-                continue
+                except:
+                    pass
+            
+            # STEP 3: Delete the file and release RAM (critical for 512MB limit)
+            if media_path:
+                try:
+                    from database_sqlite import db
+                    await cleanup_download_delayed(media_path, user_id, db)
+                    LOGGER(__name__).info(f"Cleaned up file {idx}/{total_files}: {os.path.basename(media_path)}")
+                except Exception as cleanup_err:
+                    LOGGER(__name__).warning(f"Failed to cleanup file {idx}/{total_files}: {cleanup_err}")
+            
+            # STEP 4: Tier-aware cooldown between files (same as single file downloads)
+            # This wait time prevents RAM spikes by allowing memory to be fully reclaimed
+            if idx < total_files:
+                delay = get_intra_request_delay(is_premium)
+                LOGGER(__name__).info(f"⏳ Waiting {delay}s before next file (RAM cooldown, same as single files)")
+                await asyncio.sleep(delay)
+            
+        except asyncio.CancelledError:
+            LOGGER(__name__).info(f"File {idx}/{total_files} processing cancelled")
+            if media_path:
+                try:
+                    from database_sqlite import db
+                    await cleanup_download_delayed(media_path, user_id, db)
+                except:
+                    pass
+            raise
+            
+        except Exception as e:
+            LOGGER(__name__).error(f"Error processing file {idx}/{total_files} from message {msg_id}: {e}")
+            # Clean up on error and release RAM
+            if media_path:
+                try:
+                    from database_sqlite import db
+                    await cleanup_download_delayed(media_path, user_id, db)
+                except:
+                    pass
+            
+            # Apply tier-aware cooldown even on error (same as single files)
+            if idx < total_files:
+                delay = get_intra_request_delay(is_premium)
+                LOGGER(__name__).info(f"⏳ Waiting {delay}s after error before next file")
+                await asyncio.sleep(delay)
+            
+            continue
+        
+        finally:
+            # CRITICAL RAM FIX: Explicitly delete msg reference after each iteration
+            # This allows Telethon to release cached document data (~4-12MB per message)
+            if msg is not None:
+                del msg
+                msg = None
+            if media_path is not None:
+                del media_path
+                media_path = None
+            # Force garbage collection after each file to release Telethon buffers
+            gc.collect()
 
     # Cleanup throttle data for this progress message
     _progress_throttle.cleanup(progress_message.id)
     
     # Delete progress message
     await progress_message.delete()
+    
+    # Log memory at end of media group processing
+    memory_monitor.log_memory_snapshot("MediaGroup Complete", f"User {user_id or 'unknown'}: {files_sent_count}/{total_files} files processed")
+    
+    # Force final garbage collection after media group
+    gc.collect()
     
     if files_sent_count == 0:
         await message.reply("**❌ No valid media found in the group**")

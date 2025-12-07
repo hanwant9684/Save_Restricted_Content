@@ -38,7 +38,8 @@ IS_CONSTRAINED = bool(
 
 # Tiered connection scaling for RAM optimization (uploads only - downloads use streaming)
 # Each connection uses ~5-10MB RAM
-MAX_UPLOAD_CONNECTIONS = 6 if IS_CONSTRAINED else 8
+# CRITICAL FIX: Reduced from 6 to 3 on constrained environments to prevent RAM spikes
+MAX_UPLOAD_CONNECTIONS = 3 if IS_CONSTRAINED else 6
 
 async def download_media_fast(
     client: TelegramClient,
@@ -107,13 +108,20 @@ async def upload_media_fast(
     
     FastTelethon uploads stream data in chunks, preventing full file loading into RAM.
     Connection count is automatically optimized based on file size.
+    
+    CRITICAL: Uses try/finally to ensure cleanup runs even on failures,
+    preventing memory leaks from orphaned file handles and buffers.
     """
+    import gc
+    
     file_size = os.path.getsize(file_path)
     
     # Calculate connection count to verify the monkeypatch is working
     connection_count = _optimized_connection_count_upload(file_size)
     
-    # Use FastTelethon for uploads - parallel connections with RAM efficiency
+    file_handle = None
+    result = None
+    
     try:
         LOGGER(__name__).info(
             f"FastTelethon upload starting: {file_path} "
@@ -121,12 +129,12 @@ async def upload_media_fast(
             f"using {connection_count} connections for RAM safety)"
         )
         
-        with open(file_path, 'rb') as f:
-            result = await fast_upload(
-                client=client,
-                file=f,
-                progress_callback=progress_callback
-            )
+        file_handle = open(file_path, 'rb')
+        result = await fast_upload(
+            client=client,
+            file=file_handle,
+            progress_callback=progress_callback
+        )
         
         LOGGER(__name__).info(f"FastTelethon upload complete: {file_path}")
         return result
@@ -134,31 +142,60 @@ async def upload_media_fast(
     except Exception as e:
         LOGGER(__name__).error(f"FastTelethon upload failed: {e}")
         return None
+        
+    finally:
+        # CRITICAL: Always close file handle to prevent memory leaks
+        if file_handle:
+            try:
+                file_handle.close()
+            except:
+                pass
+        
+        # Force garbage collection after upload to release buffers
+        gc.collect()
+        LOGGER(__name__).debug(f"Upload cleanup complete for: {file_path}")
 
 def _optimized_connection_count_upload(file_size, max_count=MAX_UPLOAD_CONNECTIONS, full_size=100*1024*1024):
     """
-    CRITICAL RAM FIX: Tiered connection scaling for constrained environments (Render 512MB RAM)
+    CRITICAL RAM FIX: Tiered connection scaling for constrained environments (Render 512MB RAM, Replit)
     
     Without this fix, a 90MB file spawns 18 connections (>120MB RAM spike), crashing the bot.
-    With this fix, same file uses 4 connections (~40MB RAM spike), staying within limits.
+    With this fix, same file uses 2-3 connections (~20-30MB RAM spike), staying within limits.
     
     Connection tiers (each connection uses ~10MB RAM):
-    - Files >= 1GB: 3 connections (~30MB RAM) - Prevents OOM on huge uploads
-    - Files 50MB-1GB: 4 connections (~40MB RAM) - Safe for Render, good speed
-    - Files < 50MB: 6 connections (~60MB RAM) - Faster for small files
+    
+    CONSTRAINED (Replit/Render - 512MB RAM):
+    - Files >= 1GB: 2 connections (~20MB RAM) - Prevents OOM on huge uploads
+    - Files 50MB-1GB: 2 connections (~20MB RAM) - Safe for constrained hosts
+    - Files < 50MB: 3 connections (~30MB RAM) - Faster for small files, still safe
+    
+    NON-CONSTRAINED (standard servers):
+    - Files >= 1GB: 3 connections (~30MB RAM) - Original safe value
+    - Files 50MB-1GB: 4 connections (~40MB RAM) - Original balanced value
+    - Files < 50MB: 6 connections (~60MB RAM) - Original fast value for small files
     
     IMPORTANT: We ignore max_count parameter to prevent FastTelethon's default (20)
     from bypassing our constraints. Always use hardcoded safe limits.
     """
-    # Large files (1GB+): Minimize connections to prevent OOM
-    if file_size >= 1024 * 1024 * 1024:  # 1GB
-        return 3
-    # Medium files (50MB-1GB): Balanced - CRITICAL for 90MB files on Render
-    elif file_size >= 50 * 1024 * 1024:  # 50MB
-        return 4
-    # Small files (< 50MB): Use more connections for speed
+    # On constrained environments (Replit, Render), use very conservative limits
+    if IS_CONSTRAINED:
+        # Large files (1GB+): Absolute minimum connections
+        if file_size >= 1024 * 1024 * 1024:  # 1GB
+            return 2
+        # Medium files (50MB-1GB): Still conservative
+        elif file_size >= 50 * 1024 * 1024:  # 50MB
+            return 2
+        # Small files (< 50MB): Slightly faster but still safe
+        else:
+            return 3
     else:
-        return 6
+        # Non-constrained environments: keep original values
+        if file_size >= 1024 * 1024 * 1024:  # 1GB
+            return 3
+        elif file_size >= 50 * 1024 * 1024:  # 50MB
+            return 4
+        else:
+            return 6
 
 # Apply optimized upload connection count to FastTelethon
 ParallelTransferrer._get_connection_count = staticmethod(_optimized_connection_count_upload)
