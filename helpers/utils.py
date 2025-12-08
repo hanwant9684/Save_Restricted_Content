@@ -63,6 +63,81 @@ async def cmd_exec(cmd, shell=False):
     return stdout, stderr, proc.returncode
 
 
+async def generate_thumbnail(video_path, thumb_path=None, duration=None):
+    """
+    Generate a thumbnail from a video file using ffmpeg.
+    Extracts a frame from 1 second into the video (or middle if duration known).
+    
+    Args:
+        video_path: Path to the video file
+        thumb_path: Optional path for thumbnail. If None, uses video_path + ".jpg"
+        duration: Optional video duration in seconds (for calculating middle frame)
+    
+    Returns:
+        str: Path to generated thumbnail, or None if failed
+    """
+    if thumb_path is None:
+        thumb_path = video_path + ".thumb.jpg"
+    
+    LOGGER(__name__).info(f"🎬 Generating thumbnail for: {video_path}")
+    LOGGER(__name__).info(f"📁 Thumbnail output path: {thumb_path}")
+    LOGGER(__name__).info(f"⏱️ Video duration: {duration}")
+    
+    proc = None
+    try:
+        seek_time = 0
+        if duration and duration > 1:
+            seek_time = min(max(1, duration // 4), 5)
+        
+        LOGGER(__name__).info(f"⏩ Seeking to {seek_time}s for thumbnail extraction")
+        
+        cmd = [
+            "ffmpeg", "-y", "-ss", str(seek_time), "-i", video_path,
+            "-vframes", "1", "-vf", "scale=320:-1", "-q:v", "5", thumb_path
+        ]
+        LOGGER(__name__).info(f"🔧 FFmpeg command: {' '.join(cmd)}")
+        
+        proc = await create_subprocess_exec(*cmd, stdout=PIPE, stderr=PIPE)
+        
+        try:
+            stdout, stderr = await wait_for(proc.communicate(), timeout=10.0)
+        except asyncio.TimeoutError:
+            LOGGER(__name__).warning(f"⏰ Thumbnail generation timed out after 10s - killing process")
+            proc.kill()
+            await proc.wait()
+            return None
+        
+        try:
+            stdout_str = stdout.decode().strip() if stdout else "empty"
+        except:
+            stdout_str = "Unable to decode"
+        try:
+            stderr_str = stderr.decode().strip() if stderr else "empty"
+        except:
+            stderr_str = "Unable to decode"
+        
+        LOGGER(__name__).info(f"📤 FFmpeg stdout: {stdout_str[:500]}")
+        LOGGER(__name__).info(f"📤 FFmpeg stderr: {stderr_str[:500]}")
+        LOGGER(__name__).info(f"📤 FFmpeg exit code: {proc.returncode}")
+        
+        if proc.returncode == 0 and os.path.exists(thumb_path):
+            thumb_size = os.path.getsize(thumb_path)
+            LOGGER(__name__).info(f"✅ Thumbnail generated successfully: {thumb_path} ({thumb_size} bytes)")
+            return thumb_path
+        else:
+            LOGGER(__name__).warning(f"❌ Thumbnail generation failed - exit code: {proc.returncode}, stderr: {stderr_str}")
+            return None
+    except Exception as e:
+        LOGGER(__name__).error(f"❌ Thumbnail generation error: {e}")
+        if proc and proc.returncode is None:
+            try:
+                proc.kill()
+                await proc.wait()
+            except:
+                pass
+        return None
+
+
 async def get_media_info(path):
     try:
         result = await cmd_exec([
@@ -418,6 +493,9 @@ async def send_media(
                 supports_streaming=True
             ))
         
+        # Generate thumbnail for the video
+        thumb_path = await generate_thumbnail(media_path, duration=duration)
+        
         sent_message = None
         try:
             from helpers.transfer import upload_media_fast
@@ -434,6 +512,7 @@ async def send_media(
                     fast_file,
                     caption=caption or "",
                     attributes=attributes if attributes else None,
+                    thumb=thumb_path,
                     force_document=False,
                     file_name=os.path.basename(media_path)
                 )
@@ -443,12 +522,20 @@ async def send_media(
                     media_path,
                     caption=caption or "",
                     attributes=attributes if attributes else None,
+                    thumb=thumb_path,
                     progress_callback=lambda c, t: safe_progress_callback(c, t, *progress_args),
                     force_document=False
                 )
         except Exception as e:
             LOGGER(__name__).error(f"Upload failed: {e}")
             raise
+        finally:
+            # Clean up thumbnail file
+            if thumb_path and os.path.exists(thumb_path):
+                try:
+                    os.remove(thumb_path)
+                except Exception:
+                    pass
         
         # Forward to dump channel if upload was successful (RAM-efficient, no re-upload)
         if user_id and sent_message:
