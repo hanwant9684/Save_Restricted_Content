@@ -65,12 +65,12 @@ class SessionManager:
             
             # If at capacity, try to disconnect oldest IDLE session (no active downloads)
             if len(self.active_sessions) >= self.max_sessions:
-                from queue_manager import download_queue
+                from queue_manager import download_manager
                 
                 # Find sessions without active downloads (safe to evict)
                 evictable_sessions = []
                 for uid in self.active_sessions.keys():
-                    if uid not in download_queue.active_downloads:
+                    if uid not in download_manager.active_downloads:
                         evictable_sessions.append(uid)
                 
                 # If we have sessions that can be safely evicted, evict the oldest one
@@ -174,7 +174,7 @@ class SessionManager:
         skipped_active_downloads = 0
         
         async with self._lock:
-            from queue_manager import download_queue
+            from queue_manager import download_manager
             
             idle_users = []
             for user_id, last_active in list(self.last_activity.items()):
@@ -184,7 +184,7 @@ class SessionManager:
             
             for user_id in idle_users:
                 if user_id in self.active_sessions:
-                    if user_id in download_queue.active_downloads:
+                    if user_id in download_manager.active_downloads:
                         idle_minutes = (current_time - self.last_activity[user_id]) / 60
                         LOGGER(__name__).info(
                             f"SMART TIMEOUT: Skipping session cleanup for user {user_id} "

@@ -155,8 +155,8 @@ def cleanup_orphaned_files() -> tuple[int, int]:
         # Get set of user IDs with active downloads
         active_user_ids = set()
         try:
-            from queue_manager import download_queue
-            active_user_ids = set(download_queue.active_downloads)
+            from queue_manager import download_manager
+            active_user_ids = set(download_manager.active_downloads)
             if active_user_ids:
                 LOGGER(__name__).debug(f"Active download users: {active_user_ids}")
         except ImportError:
