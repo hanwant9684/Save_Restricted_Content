@@ -5,3 +5,8 @@ uvloop
 waitress
 orjson
 ffmpeg
+cryptg
+psutil
+Telethon
+uvloop
+waitress
