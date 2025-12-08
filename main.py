@@ -512,7 +512,7 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                     client_to_use,
                     chat_message,
                     download_path,
-                    progress_callback=lambda c, t: safe_progress_callback(c, t, *progressArgs("📥 FastTelethon Download", progress_message, start_time))
+                    progress_callback=lambda c, t: safe_progress_callback(c, t, *progressArgs("📥 Downloading", progress_message, start_time))
                 )
                 media_path = result_path  # Update with actual result
 

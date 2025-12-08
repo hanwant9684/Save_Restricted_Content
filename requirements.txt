@@ -5,11 +5,3 @@ uvloop
 waitress
 orjson
 ffmpeg
-Pillow
-cryptg
-orjson
-Pillow
-psutil
-Telethon
-uvloop
-waitress
