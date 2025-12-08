@@ -9,7 +9,7 @@ from database_sqlite import db
 from config import PyroConf
 
 class DownloadManager:
-    """Simplified download manager without queue - just tracks active downloads"""
+    """Simplified download manager - just tracks active downloads and concurrency limits"""
     
     def __init__(self, max_concurrent: int = 3):
         self.max_concurrent = max_concurrent
@@ -22,7 +22,7 @@ class DownloadManager:
         
         self._lock = asyncio.Lock()
         
-        LOGGER(__name__).info(f"Download Manager initialized: {max_concurrent} concurrent max (no queue)")
+        LOGGER(__name__).info(f"Download Manager initialized: {max_concurrent} concurrent max")
     
     def add_active_download(self, user_id: int) -> None:
         """
@@ -51,14 +51,14 @@ class DownloadManager:
             LOGGER(__name__).debug(f"Active download removed for user {user_id}: was not ref-counted")
     
     async def start_processor(self):
-        """No-op for compatibility - no queue processor needed"""
-        LOGGER(__name__).info("Download manager ready (no queue)")
+        """No-op for compatibility"""
+        LOGGER(__name__).info("Download manager ready")
     
     async def stop_processor(self):
         """No-op for compatibility"""
         pass
     
-    async def add_to_queue(
+    async def start_download(
         self, 
         user_id: int, 
         download_coro, 
@@ -66,7 +66,7 @@ class DownloadManager:
         post_url: str,
         is_premium: bool = False
     ) -> Tuple[bool, Optional[str]]:
-        """Start download immediately or reject if busy/at capacity"""
+        """Start download immediately or reject if user is busy or server is at capacity"""
         async with self._lock:
             if user_id in self.user_cooldowns:
                 current_time = datetime.now().timestamp()
@@ -173,7 +173,7 @@ class DownloadManager:
             except Exception as e:
                 LOGGER(__name__).warning(f"Could not set download cooldown for user {user_id}: {e}")
     
-    async def get_queue_status(self, user_id: int) -> str:
+    async def get_status(self, user_id: int) -> str:
         async with self._lock:
             if user_id in self.active_downloads:
                 return (
@@ -187,7 +187,7 @@ class DownloadManager:
                 f"Send a download link to get started!"
             )
     
-    async def get_global_status(self) -> str:
+    async def get_server_status(self) -> str:
         async with self._lock:
             return (
                 f"Download System Status\n"
@@ -255,4 +255,4 @@ IS_CONSTRAINED = bool(
 
 MAX_CONCURRENT = 3 if IS_CONSTRAINED else 20
 
-download_queue = DownloadManager(max_concurrent=MAX_CONCURRENT)
+download_manager = DownloadManager(max_concurrent=MAX_CONCURRENT)

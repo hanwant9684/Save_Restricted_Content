@@ -341,16 +341,14 @@ async def execute_broadcast(client, admin_id: int, broadcast_data: dict):
     return total_users, successful_sends
 
 @admin_only
-async def admin_stats_command(event, queue_manager=None):
+async def admin_stats_command(event, download_mgr=None):
     """Show detailed admin statistics"""
     try:
         stats = db.get_stats()
         
         active_downloads = 0
-        queue_size = 0
-        if queue_manager:
-            active_downloads = len(queue_manager.active_downloads)
-            queue_size = len(queue_manager.waiting_queue)
+        if download_mgr:
+            active_downloads = len(download_mgr.active_downloads)
 
         stats_text = (
             "👑 **ADMIN DASHBOARD**\n"
@@ -363,8 +361,7 @@ async def admin_stats_command(event, queue_manager=None):
             f"🔐 Admins: `{stats.get('admin_count', 0)}`\n\n"
             "📈 **Download Activity:**\n"
             f"📥 Today: `{stats.get('today_downloads', 0)}`\n"
-            f"⚡ Active: `{active_downloads}`\n"
-            f"📋 Queue: `{queue_size}`\n\n"
+            f"⚡ Active: `{active_downloads}`\n\n"
             "——————————————————————————\n\n"
             "⚙️ **Quick Admin Actions:**\n"
             "• `/killall` - Cancel all downloads\n"

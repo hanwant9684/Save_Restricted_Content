@@ -65,7 +65,7 @@ from admin_commands import (
     user_info_command,
     broadcast_callback_handler
 )
-from queue_manager import download_queue
+from queue_manager import download_manager
 from legal_acceptance import show_legal_acceptance, handle_legal_callback
 
 # Initialize the bot client with Telethon
@@ -247,9 +247,8 @@ async def help_command(event):
             "   💡 Example: `/bdl https://t.me/channel/100 https://t.me/channel/120`\n"
             "   📦 Downloads all posts from 100 to 120 (max 20)\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "🚀 **Queue System:**\n\n"
-            "   👑 **Premium Priority** - Jump ahead in queue!\n"
-            "   `/queue` - Check your position\n"
+            "📊 **Download Status:**\n\n"
+            "   `/status` - Check your download status\n"
             "   `/canceldownload` - Cancel current download\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "🔐 **Authentication:**\n\n"
@@ -264,7 +263,7 @@ async def help_command(event):
             "   `/stats` - Bot statistics\n\n"
             "💡 **Your Benefits:**\n"
             "   ✅ Unlimited downloads\n"
-            "   ✅ Priority queue access\n"
+            "   ✅ Priority access\n"
             "   ✅ Batch download (up to 20 posts)\n"
             "   ✅ No daily limits"
         )
@@ -277,8 +276,7 @@ async def help_command(event):
             "   `/dl <link>` or just paste a link\n"
             "   📺 Videos • 🖼️ Photos • 🎵 Audio • 📄 Documents\n\n"
             "⚠️ **Your Limits:**\n"
-            "   📊 5 download per day\n"
-            "   ⏳ Normal queue priority\n"
+            "   📊 5 downloads per day\n"
             "   ❌ No batch downloads\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "💎 **Get More Downloads:**\n\n"
@@ -292,8 +290,8 @@ async def help_command(event):
             "   🚀 Priority downloads\n"
             "   📦 Batch download support\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "🚀 **Queue System:**\n\n"
-            "   `/queue` - Check your position\n"
+            "📊 **Download Status:**\n\n"
+            "   `/status` - Check your download status\n"
             "   `/canceldownload` - Cancel download\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "🔐 **Authentication:**\n\n"
@@ -623,8 +621,8 @@ async def download_media(event):
         )
         return
     elif error_code == 'slots_full':
-        from queue_manager import download_queue
-        active_count = len(download_queue.active_downloads)
+        from queue_manager import download_manager
+        active_count = len(download_manager.active_downloads)
         await event.respond(
             "⏳ **All session slots are currently busy!**\n\n"
             f"👥 **Active users downloading:** {active_count}/3\n\n"
@@ -645,7 +643,7 @@ async def download_media(event):
     
     # Add to download queue
     download_coro = handle_download(bot, event, post_url, user_client, True)
-    success, msg = await download_queue.add_to_queue(
+    success, msg = await download_manager.start_download(
         event.sender_id,
         download_coro,
         event,
@@ -729,8 +727,8 @@ async def download_range(event):
         )
         return
     elif error_code == 'slots_full':
-        from queue_manager import download_queue
-        active_count = len(download_queue.active_downloads)
+        from queue_manager import download_manager
+        active_count = len(download_manager.active_downloads)
         await event.respond(
             "⏳ **All session slots are currently busy!**\n\n"
             f"👥 **Active users downloading:** {active_count}/3\n\n"
@@ -811,9 +809,9 @@ async def download_range(event):
     # CRITICAL FIX: Register user in active_downloads to prevent session timeout during batch
     # This prevents the session manager from disconnecting "idle" sessions during long batch downloads
     # Uses reference counting so individual downloads in batch don't remove the batch's hold
-    from queue_manager import download_queue
+    from queue_manager import download_manager
     from helpers.session_manager import session_manager
-    download_queue.add_active_download(event.sender_id)
+    download_manager.add_active_download(event.sender_id)
     LOGGER(__name__).info(f"Batch download: Registered user {event.sender_id} in active_downloads (ref-counted) to prevent session timeout")
 
     try:
@@ -905,7 +903,7 @@ async def download_range(event):
     finally:
         # CRITICAL: Always remove user from active_downloads when batch completes or fails
         # Uses reference counting so this only removes the batch's hold, not individual download holds
-        download_queue.remove_active_download(event.sender_id)
+        download_manager.remove_active_download(event.sender_id)
         LOGGER(__name__).info(f"Batch download: Removed user {event.sender_id} from active_downloads (ref-counted)")
 
 # Phone authentication commands
@@ -1048,7 +1046,7 @@ async def cancel_command(event):
 @register_user
 async def cancel_download_command(event):
     """Cancel user's running downloads (including batch downloads)"""
-    queue_success, queue_msg = await download_queue.cancel_user_download(event.sender_id)
+    queue_success, queue_msg = await download_manager.cancel_user_download(event.sender_id)
     
     batch_cancelled = cancel_user_tasks(event.sender_id)
     
@@ -1065,18 +1063,18 @@ async def cancel_download_command(event):
     else:
         await event.respond(queue_msg)
 
-@bot.on(events.NewMessage(pattern='/queue', incoming=True, func=lambda e: e.is_private))
+@bot.on(events.NewMessage(pattern='/status', incoming=True, func=lambda e: e.is_private))
 @register_user
-async def queue_status_command(event):
-    """Check your download queue status"""
-    status = await download_queue.get_queue_status(event.sender_id)
+async def status_command(event):
+    """Check your download status"""
+    status = await download_manager.get_status(event.sender_id)
     await event.respond(status)
 
-@bot.on(events.NewMessage(pattern='/qstatus', incoming=True, func=lambda e: e.is_private))
+@bot.on(events.NewMessage(pattern='/serverstatus', incoming=True, func=lambda e: e.is_private))
 @admin_only
-async def global_queue_status_command(event):
-    """Check global download queue status (admin only)"""
-    status = await download_queue.get_global_status()
+async def server_status_command(event):
+    """Check server download status (admin only)"""
+    status = await download_manager.get_server_status()
     await event.respond(status)
 
 @bot.on(events.NewMessage(incoming=True, func=lambda e: e.is_private and e.text and not e.text.startswith('/') and is_new_update(e)))
@@ -1088,25 +1086,15 @@ async def handle_any_message(event):
         is_premium = db.get_user_type(event.sender_id) in ['paid', 'admin']
         
         # Check if user already has an active download (quick check before getting client)
-        async with download_queue._lock:
-            if event.sender_id in download_queue.user_queue_positions or event.sender_id in download_queue.active_downloads:
-                position = download_queue.get_queue_position(event.sender_id)
-                if event.sender_id in download_queue.active_downloads:
-                    await event.respond(
-                        "❌ **You already have a download in progress!**\n\n"
-                        "⏳ Please wait for it to complete.\n\n"
-                        "💡 **Want to download this instead?**\n"
-                        "Use `/canceldownload` to cancel the current download."
-                    )
-                    return
-                else:
-                    await event.respond(
-                        f"❌ **You already have a download in the queue!**\n\n"
-                        f"📍 **Position:** #{position}/{len(download_queue.waiting_queue)}\n\n"
-                        f"💡 **Want to cancel it?**\n"
-                        f"Use `/canceldownload` to remove from queue."
-                    )
-                    return
+        async with download_manager._lock:
+            if event.sender_id in download_manager.active_downloads:
+                await event.respond(
+                    "❌ **You already have a download in progress!**\n\n"
+                    "⏳ Please wait for it to complete.\n\n"
+                    "💡 **Want to download this instead?**\n"
+                    "Use `/canceldownload` to cancel the current download."
+                )
+                return
         
         # Check if user has personal session
         user_client, error_code = await get_user_client(event.sender_id)
@@ -1120,7 +1108,7 @@ async def handle_any_message(event):
             )
             return
         elif error_code == 'slots_full':
-            active_count = len(download_queue.active_downloads)
+            active_count = len(download_manager.active_downloads)
             await event.respond(
                 "⏳ **All session slots are currently busy!**\n\n"
                 f"👥 **Active users downloading:** {active_count}/3\n\n"
@@ -1138,7 +1126,7 @@ async def handle_any_message(event):
         
         # Add to download queue
         download_coro = handle_download(bot, event, event.text, user_client, True)
-        success, msg = await download_queue.add_to_queue(
+        success, msg = await download_manager.start_download(
             event.sender_id,
             download_coro,
             event,
@@ -1168,7 +1156,7 @@ async def stats(event):
         f"⚡ CPU: `{cpu_percent}%`\n\n"
         "—————————————————————\n\n"
         "💡 **Quick Access:**\n"
-        "• `/queue` - Check downloads\n"
+        "• `/status` - Check downloads\n"
         "• `/myinfo` - Your account\n"
         "• `/help` - All commands"
     )
@@ -1188,7 +1176,7 @@ async def logs(event):
 @bot.on(events.NewMessage(pattern='/killall', incoming=True, func=lambda e: e.is_private))
 @admin_only
 async def cancel_all_tasks(event):
-    queue_cancelled = await download_queue.cancel_all_downloads()
+    queue_cancelled = await download_manager.cancel_all_downloads()
     task_cancelled = 0
     for task in list(RUNNING_TASKS):
         if not task.done():
@@ -1197,7 +1185,7 @@ async def cancel_all_tasks(event):
     total_cancelled = queue_cancelled + task_cancelled
     await event.respond(
         f"✅ **All downloads cancelled!**\n\n"
-        f"📊 **Queue downloads:** {queue_cancelled}\n"
+        f"📊 **Active downloads:** {queue_cancelled}\n"
         f"📊 **Other tasks:** {task_cancelled}\n"
         f"📊 **Total:** {total_cancelled}"
     )
@@ -1272,7 +1260,7 @@ async def test_dump_channel(event):
 
 @bot.on(events.NewMessage(pattern='/adminstats', incoming=True, func=lambda e: e.is_private))
 async def admin_stats_handler(event):
-    await admin_stats_command(event, queue_manager=download_queue)
+    await admin_stats_command(event, download_mgr=download_manager)
 
 @bot.on(events.NewMessage(pattern='/getpremium', incoming=True, func=lambda e: e.is_private))
 @register_user
@@ -1738,9 +1726,9 @@ if __name__ == "__main__":
         # When running main.py directly (not through server_wsgi.py),
         # we need to start the queue processor using asyncio
         async def start_with_queue():
-            from queue_manager import download_queue
+            from queue_manager import download_manager
             await bot.start(bot_token=PyroConf.BOT_TOKEN)
-            await download_queue.start_processor()
+            await download_manager.start_processor()
             LOGGER(__name__).info("Download queue processor initialized")
             LOGGER(__name__).info("Bot Started!")
             # Wait for the bot to be disconnected (keeps running until stopped)

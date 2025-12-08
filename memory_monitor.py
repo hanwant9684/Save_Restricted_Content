@@ -98,11 +98,9 @@ class MemoryMonitor:
             active_sessions = 0
         
         try:
-            from queue_manager import download_queue
-            queue_size = len(download_queue.waiting_queue) if hasattr(download_queue, 'waiting_queue') else 0
-            active_downloads = len(download_queue.active_downloads) if hasattr(download_queue, 'active_downloads') else 0
+            from queue_manager import download_manager
+            active_downloads = len(download_manager.active_downloads) if hasattr(download_manager, 'active_downloads') else 0
         except:
-            queue_size = 0
             active_downloads = 0
         
         try:
@@ -115,7 +113,6 @@ class MemoryMonitor:
         
         return {
             'active_sessions': active_sessions,
-            'queue_size': queue_size,
             'active_downloads': active_downloads,
             'cached_items': cached_items,
             'ad_sessions': ad_sessions,
@@ -142,7 +139,7 @@ class MemoryMonitor:
             f"📊 MEMORY SNAPSHOT | Operation: {operation or 'General'}\n"
             f"├─ RAM Usage: {mem['rss_mb']:.1f} MB (Virtual: {mem['vms_mb']:.1f} MB)\n"
             f"├─ System: {mem['system_percent']:.1f}% used ({mem['system_available_mb']:.1f} MB available)\n"
-            f"├─ Sessions: {state['active_sessions']} | Queue: {state['queue_size']} | Active DLs: {state['active_downloads']}\n"
+            f"├─ Sessions: {state['active_sessions']} | Active DLs: {state['active_downloads']}\n"
             f"├─ Cache: {state['cached_items']} items | Ad Sessions: {state['ad_sessions']}\n"
             f"├─ Threads: {state['thread_count']} | Open files: {state['open_files']}\n"
             f"└─ Context: {context or 'N/A'}"
@@ -152,7 +149,7 @@ class MemoryMonitor:
         if mem['rss_mb'] > 480:  # 93% of 512MB - crash imminent!
             critical_msg = (
                 f"🚨 CRITICAL: CRASH IMMINENT! {mem['rss_mb']:.1f} MB / 512 MB\n"
-                f"Sessions: {state['active_sessions']} | Queue: {state['queue_size']} | "
+                f"Sessions: {state['active_sessions']} | "
                 f"Active DLs: {state['active_downloads']} | Cache: {state['cached_items']} | "
                 f"Ad Sessions: {state['ad_sessions']}\n"
                 f"Current Operation: {operation or 'Unknown'}\n"
@@ -203,7 +200,7 @@ class MemoryMonitor:
         # Periodic snapshots - only written if memory >= 400MB
         if operation == "Periodic Check" and mem['rss_mb'] >= 400:
             self._write_to_memory_log(f"📊 Periodic Snapshot (High Memory): {mem['rss_mb']:.1f} MB")
-            self._write_to_memory_log(f"   Sessions: {state['active_sessions']} | Queue: {state['queue_size']} | Active DLs: {state['active_downloads']} | Cache: {state['cached_items']} | Ad Sessions: {state['ad_sessions']}")
+            self._write_to_memory_log(f"   Sessions: {state['active_sessions']} | Active DLs: {state['active_downloads']} | Cache: {state['cached_items']} | Ad Sessions: {state['ad_sessions']}")
         
         self.last_memory_mb = mem['rss_mb']
         return mem
@@ -298,7 +295,6 @@ class MemoryMonitor:
             },
             "application_state": {
                 "active_sessions": state['active_sessions'],
-                "queue_size": state['queue_size'],
                 "active_downloads": state['active_downloads'],
                 "cached_items": state['cached_items'],
                 "ad_sessions": state['ad_sessions'],
@@ -322,7 +318,7 @@ class MemoryMonitor:
             f"📊 /memory-debug accessed\n"
             f"├─ RAM Usage: {mem['rss_mb']:.1f} MB (Virtual: {mem['vms_mb']:.1f} MB)\n"
             f"├─ System: {mem['system_percent']:.1f}% used ({mem['system_available_mb']:.1f} MB available)\n"
-            f"├─ Sessions: {state['active_sessions']} | Queue: {state['queue_size']} | Active DLs: {state['active_downloads']}\n"
+            f"├─ Sessions: {state['active_sessions']} | Active DLs: {state['active_downloads']}\n"
             f"├─ Cache: {state['cached_items']} items | Ad Sessions: {state['ad_sessions']}\n"
             f"├─ Threads: {state['thread_count']} | Open files: {state['open_files']}\n"
             f"└─ Status: {response['status']}"

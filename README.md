@@ -6,7 +6,7 @@ A Telegram bot for downloading and forwarding media from private/public channels
 
 - Download and forward media from Telegram channels
 - Support for multiple media types (photos, videos, documents)
-- Queue management for downloads
+- Download concurrency management
 - Ad monetization system (URL shortener monetization has been retired)
 - SQLite database for user and session management (portable & lightweight)
 - Premium user system
@@ -54,7 +54,7 @@ The bot requires the following environment variables to run. You can set them in
 - `ad_monetization.py` - Ad monetization logic
 - `access_control.py` - User authentication and access control
 - `admin_commands.py` - Admin-only commands
-- `queue_manager.py` - Download queue management
+- `queue_manager.py` - Download manager for concurrency control
 - `helpers/` - Utility functions for media, files, and messages
 
 ## Credits

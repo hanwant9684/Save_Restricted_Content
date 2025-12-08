@@ -1239,11 +1239,10 @@ async def periodic_gc_task():
             LOGGER(__name__).error(f"Garbage collection error: {e}")
 
 async def cleanup_watchdog_task():
-    """Cleanup watchdog to prevent memory leaks from ad sessions and orphaned queue items.
+    """Cleanup watchdog to prevent memory leaks from ad sessions and orphaned downloads.
     Runs every 5 minutes to purge:
     1. Expired ad sessions (>30 min old) and their cache entries
-    2. Stale queue items that have been waiting too long
-    3. Orphaned download tasks that failed to clean up properly
+    2. Orphaned download tasks that failed to clean up properly
     """
     import asyncio
     from logger import LOGGER
@@ -1264,17 +1263,16 @@ async def cleanup_watchdog_task():
             except Exception as e:
                 LOGGER(__name__).error(f"Error in ad sessions cleanup: {e}")
             
-            # Clean up stale queue items and orphaned tasks
+            # Clean up orphaned download tasks
             try:
-                from queue_manager import download_queue
-                sweep_result = await download_queue.sweep_stale_items(max_age_minutes=30)
-                if sweep_result['stale_items'] > 0 or sweep_result['orphaned_tasks'] > 0:
+                from queue_manager import download_manager
+                sweep_result = await download_manager.sweep_stale_items(max_age_minutes=30)
+                if sweep_result['orphaned_tasks'] > 0:
                     LOGGER(__name__).warning(
-                        f"🧹 Cleanup watchdog: removed {sweep_result['stale_items']} stale queue items "
-                        f"and {sweep_result['orphaned_tasks']} orphaned tasks"
+                        f"🧹 Cleanup watchdog: removed {sweep_result['orphaned_tasks']} orphaned tasks"
                     )
             except Exception as e:
-                LOGGER(__name__).error(f"Error in queue cleanup: {e}")
+                LOGGER(__name__).error(f"Error in download cleanup: {e}")
             
             # Log memory snapshot after cleanup
             from memory_monitor import memory_monitor
@@ -1336,16 +1334,16 @@ def run_bot():
             main.LOGGER(__name__).info("Started periodic garbage collection task")
             
             background_tasks.append(asyncio.create_task(cleanup_watchdog_task()))
-            main.LOGGER(__name__).info("Started cleanup watchdog task (removes expired ad sessions and stale queue items every 5 min)")
+            main.LOGGER(__name__).info("Started cleanup watchdog task (removes expired ad sessions every 5 min)")
             
             from memory_monitor import memory_monitor
             background_tasks.append(asyncio.create_task(memory_monitor.periodic_monitor(interval=300)))
             main.LOGGER(__name__).info("Started periodic memory monitoring (5-minute intervals)")
             
-            # Start download queue processor using asyncio (not threading)
-            from queue_manager import download_queue
-            await download_queue.start_processor()
-            main.LOGGER(__name__).info("Download queue processor initialized")
+            # Start download manager
+            from queue_manager import download_manager
+            await download_manager.start_processor()
+            main.LOGGER(__name__).info("Download manager initialized")
             
             memory_monitor.log_memory_snapshot("Bot Startup", "Initial state after bot start")
             
