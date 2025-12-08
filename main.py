@@ -326,16 +326,16 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
         post_url = post_url.split("?", 1)[0]
 
     try:
-        LOGGER(__name__).info(f"Attempting to parse URL: {post_url}")
+        LOGGER(__name__).debug(f"Attempting to parse URL: {post_url}")
         chat_id, message_id = getChatMsgID(post_url)
         
         # Convert chat_id to int if it's a numeric string (Telethon requirement)
         # Telethon needs integers for numeric IDs, unlike Pyrogram which accepted strings
         if isinstance(chat_id, str) and (chat_id.lstrip('-').isdigit()):
             chat_id = int(chat_id)
-            LOGGER(__name__).info(f"Converted chat_id to integer: {chat_id}")
+            LOGGER(__name__).debug(f"Converted chat_id to integer: {chat_id}")
         
-        LOGGER(__name__).info(f"Successfully parsed - Chat ID: {chat_id} (type: {type(chat_id).__name__}), Message ID: {message_id}")
+        LOGGER(__name__).debug(f"Parsed URL - Chat: {chat_id}, Message: {message_id}")
 
         # Use user's personal session (required for all users, including admins)
         client_to_use = user_client
@@ -350,9 +350,9 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
 
         # Try to resolve the entity first (this helps Telethon find private channels)
         try:
-            LOGGER(__name__).info(f"Attempting to resolve entity for chat: {chat_id}")
+            LOGGER(__name__).debug(f"Resolving entity for chat: {chat_id}")
             entity = await client_to_use.get_entity(chat_id)
-            LOGGER(__name__).info(f"Successfully resolved entity for chat: {chat_id}, entity type: {type(entity).__name__}")
+            LOGGER(__name__).debug(f"Resolved entity for chat: {chat_id}")
         except ValueError as e:
             LOGGER(__name__).error(f"Cannot find entity {chat_id}: {e}")
             
@@ -368,7 +368,7 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                 # Try to resolve entity again after loading dialogs
                 entity = await client_to_use.get_entity(chat_id)
                 await status_msg.delete()
-                LOGGER(__name__).info(f"Successfully resolved entity after loading dialogs: {chat_id}")
+                LOGGER(__name__).debug(f"Resolved entity after loading dialogs: {chat_id}")
             except ValueError as e2:
                 await status_msg.delete()
                 LOGGER(__name__).error(f"Still cannot find entity {chat_id} after loading dialogs: {e2}")
@@ -400,7 +400,7 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
 
         chat_message = await client_to_use.get_messages(chat_id, ids=message_id)
 
-        LOGGER(__name__).info(f"Downloading media from URL: {post_url}")
+        LOGGER(__name__).debug(f"Downloading media from URL: {post_url}")
 
         if chat_message.document or chat_message.video or chat_message.audio:
             # Telethon uses .size instead of .file_size (Pyrogram compatibility)
@@ -501,7 +501,7 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
             # Set expected path BEFORE download - ensures cleanup works even if timeout during download
             media_path = download_path
 
-            memory_monitor.log_memory_snapshot("Download Start", f"User {event.sender_id}: {filename}")
+            memory_monitor.log_memory_snapshot("Download Start", f"User {event.sender_id}: {filename}", silent=True)
             
             async def process_single_file():
                 nonlocal media_path
@@ -514,8 +514,8 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                 )
                 media_path = result_path  # Update with actual result
 
-                memory_monitor.log_memory_snapshot("Download Complete", f"User {event.sender_id}: {filename}")
-                LOGGER(__name__).info(f"Downloaded media: {media_path}")
+                memory_monitor.log_memory_snapshot("Download Complete", f"User {event.sender_id}: {filename}", silent=True)
+                LOGGER(__name__).debug(f"Downloaded media: {media_path}")
                 
                 # RAM OPTIMIZATION: Release download buffers before upload starts
                 # This ensures peak RAM usage is minimized by clearing download memory before allocating upload buffers
@@ -672,10 +672,10 @@ async def download_range(event):
 
     # Check if user already has a batch running
     user_tasks = get_user_tasks(event.sender_id)
-    LOGGER(__name__).info(f"Batch download: User {event.sender_id} has {len(user_tasks)} total tasks")
+    LOGGER(__name__).debug(f"Batch download: User {event.sender_id} has {len(user_tasks)} total tasks")
     if user_tasks:
         running_count = sum(1 for task in user_tasks if not task.done())
-        LOGGER(__name__).info(f"Batch download: User {event.sender_id} has {running_count} running tasks")
+        LOGGER(__name__).debug(f"Batch download: User {event.sender_id} has {running_count} running tasks")
         if running_count > 0:
             LOGGER(__name__).warning(f"Batch download: Blocked for user {event.sender_id} - {running_count} tasks already running")
             await event.respond(
@@ -684,7 +684,7 @@ async def download_range(event):
             )
             return
     else:
-        LOGGER(__name__).info(f"Batch download: User {event.sender_id} has no running tasks - proceeding")
+        LOGGER(__name__).debug(f"Batch download: User {event.sender_id} has no running tasks - proceeding")
 
     try:
         start_chat, start_id = getChatMsgID(args[1])
@@ -696,10 +696,10 @@ async def download_range(event):
     # Same logic as in handle_download function
     if isinstance(start_chat, str) and (start_chat.lstrip('-').isdigit()):
         start_chat = int(start_chat)
-        LOGGER(__name__).info(f"Batch download: Converted start_chat to integer: {start_chat}")
+        LOGGER(__name__).debug(f"Batch download: Converted start_chat to integer: {start_chat}")
     if isinstance(end_chat, str) and (end_chat.lstrip('-').isdigit()):
         end_chat = int(end_chat)
-        LOGGER(__name__).info(f"Batch download: Converted end_chat to integer: {end_chat}")
+        LOGGER(__name__).debug(f"Batch download: Converted end_chat to integer: {end_chat}")
 
     if start_chat != end_chat:
         return await event.respond("**❌ Both links must be from the same channel.**")
@@ -748,27 +748,27 @@ async def download_range(event):
 
     # Try to resolve the channel entity first (same fallback as handle_download)
     try:
-        LOGGER(__name__).info(f"Batch download: Attempting to resolve entity for channel: {start_chat}")
+        LOGGER(__name__).debug(f"Batch download: Resolving entity for channel: {start_chat}")
         entity = await client_to_use.get_entity(start_chat)
-        LOGGER(__name__).info(f"Batch download: Successfully resolved entity for channel: {start_chat}")
+        LOGGER(__name__).debug(f"Batch download: Resolved entity for channel: {start_chat}")
     except ValueError as e:
         LOGGER(__name__).error(f"Batch download: Cannot find entity {start_chat}: {e}")
         
         # Try to load all dialogs to populate entity cache, then try again
         try:
-            LOGGER(__name__).info(f"Batch download: Fetching dialogs to populate entity cache for user {event.sender_id}")
+            LOGGER(__name__).debug(f"Batch download: Fetching dialogs for user {event.sender_id}")
             status_msg = await event.respond("🔄 **Loading your channels... Please wait.**")
             
             # Get all dialogs (chats/channels) - this populates Telethon's entity cache
             dialogs = await client_to_use.get_dialogs(limit=None)
-            LOGGER(__name__).info(f"Batch download: Loaded {len(dialogs)} dialogs for user {event.sender_id}")
+            LOGGER(__name__).debug(f"Batch download: Loaded {len(dialogs)} dialogs")
             
             await status_msg.delete()
             
             # Try again after loading dialogs
             try:
                 entity = await client_to_use.get_entity(start_chat)
-                LOGGER(__name__).info(f"Batch download: Successfully resolved entity after loading dialogs: {start_chat}")
+                LOGGER(__name__).debug(f"Batch download: Resolved entity after loading dialogs")
             except Exception as retry_error:
                 LOGGER(__name__).error(f"Batch download: Still cannot resolve entity after loading dialogs: {retry_error}")
                 await event.respond(
@@ -791,7 +791,7 @@ async def download_range(event):
             return
 
     prefix = args[1].rsplit("/", 1)[0]
-    LOGGER(__name__).info(f"Batch download: Starting download loop for {batch_count} posts (IDs {start_id}-{end_id})")
+    LOGGER(__name__).debug(f"Batch download: Starting loop for {batch_count} posts")
     loading = await event.respond(f"📥 **Downloading posts {start_id}–{end_id}…**")
 
     # Determine user tier once for the entire batch (avoid blocking DB calls in loop)
@@ -812,12 +812,12 @@ async def download_range(event):
     from queue_manager import download_manager
     from helpers.session_manager import session_manager
     download_manager.add_active_download(event.sender_id)
-    LOGGER(__name__).info(f"Batch download: Registered user {event.sender_id} in active_downloads (ref-counted) to prevent session timeout")
+    LOGGER(__name__).debug(f"Batch download: Registered user {event.sender_id} in active_downloads")
 
     try:
         for msg_id in range(start_id, end_id + 1):
             url = f"{prefix}/{msg_id}"
-            LOGGER(__name__).info(f"Batch download: Processing message {msg_id} ({msg_id - start_id + 1}/{batch_count})")
+            LOGGER(__name__).debug(f"Batch: msg {msg_id} ({msg_id - start_id + 1}/{batch_count})")
             
             # Keep session alive by updating last_activity timestamp periodically
             if event.sender_id in session_manager.last_activity:
@@ -826,14 +826,14 @@ async def download_range(event):
             try:
                 chat_msg = await client_to_use.get_messages(start_chat, ids=msg_id)
                 if not chat_msg:
-                    LOGGER(__name__).info(f"Batch download: Message {msg_id} not found - skipping")
+                    LOGGER(__name__).debug(f"Batch: msg {msg_id} not found")
                     skipped += 1
                     continue
 
                 has_media = bool(chat_msg.grouped_id or chat_msg.media)
                 has_text  = bool(chat_msg.text or chat_msg.message)
                 if not (has_media or has_text):
-                    LOGGER(__name__).info(f"Batch download: Message {msg_id} has no content - skipping")
+                    LOGGER(__name__).debug(f"Batch: msg {msg_id} no content")
                     skipped += 1
                     continue
 
@@ -841,12 +841,12 @@ async def download_range(event):
                 current_grouped_id = getattr(chat_msg, 'grouped_id', None)
                 if current_grouped_id:
                     if current_grouped_id in processed_media_groups:
-                        LOGGER(__name__).info(f"Batch download: Message {msg_id} belongs to already-processed media group {current_grouped_id} - skipping")
+                        LOGGER(__name__).debug(f"Batch: msg {msg_id} already in group {current_grouped_id}")
                         skipped += 1
                         continue
-                    LOGGER(__name__).info(f"Batch download: Processing new media group {current_grouped_id} starting from message {msg_id}")
+                    LOGGER(__name__).debug(f"Batch: new media group {current_grouped_id}")
 
-                LOGGER(__name__).info(f"Batch download: Calling handle_download for message {msg_id}")
+                LOGGER(__name__).debug(f"Batch: downloading msg {msg_id}")
                 task = track_task(handle_download(bot, event, url, client_to_use, False), event.sender_id)
                 try:
                     await task
@@ -854,8 +854,8 @@ async def download_range(event):
                     # Mark media group as processed AFTER successful download (not before)
                     if current_grouped_id:
                         processed_media_groups.add(current_grouped_id)
-                        LOGGER(__name__).info(f"Batch download: Media group {current_grouped_id} marked as processed after successful download")
-                    LOGGER(__name__).info(f"Batch download: Successfully downloaded message {msg_id} (total: {downloaded})")
+                        LOGGER(__name__).debug(f"Batch: marked group {current_grouped_id} as processed")
+                    LOGGER(__name__).debug(f"Batch: downloaded msg {msg_id} (total: {downloaded})")
                     # Increment usage count for batch downloads after success
                     db.increment_usage(event.sender_id)
                 except asyncio.CancelledError:
@@ -904,7 +904,7 @@ async def download_range(event):
         # CRITICAL: Always remove user from active_downloads when batch completes or fails
         # Uses reference counting so this only removes the batch's hold, not individual download holds
         download_manager.remove_active_download(event.sender_id)
-        LOGGER(__name__).info(f"Batch download: Removed user {event.sender_id} from active_downloads (ref-counted)")
+        LOGGER(__name__).debug(f"Batch: removed user {event.sender_id} from active_downloads")
 
 # Phone authentication commands
 @bot.on(events.NewMessage(pattern='/login', incoming=True, func=lambda e: e.is_private))
