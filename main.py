@@ -1196,69 +1196,6 @@ async def cancel_all_tasks(event):
         f"📊 **Total:** {total_cancelled}"
     )
 
-# Thumbnail commands
-@bot.on(events.NewMessage(pattern='/setthumb', incoming=True, func=lambda e: e.is_private))
-@register_user
-async def set_thumbnail(event):
-    """Set custom thumbnail for video uploads"""
-    reply_msg = await event.get_reply_message()
-    if reply_msg and reply_msg.photo:
-        # User replied to a photo
-        photo = reply_msg.photo
-        file_id = photo.id
-        
-        if db.set_custom_thumbnail(event.sender_id, file_id):
-            await event.respond(
-                "✅ **Custom thumbnail saved successfully!**\n\n"
-                "This thumbnail will be used for all your video downloads.\n\n"
-                "Use `/delthumb` to remove it."
-            )
-            LOGGER(__name__).info(f"User {event.sender_id} set custom thumbnail")
-        else:
-            await event.respond("❌ **Failed to save thumbnail. Please try again.**")
-    else:
-        await event.respond(
-            "📸 **How to set a custom thumbnail:**\n\n"
-            "1. Send or forward a photo to the bot\n"
-            "2. Reply to that photo with `/setthumb`\n\n"
-            "The photo will be used as thumbnail for all your video downloads."
-        )
-
-@bot.on(events.NewMessage(pattern='/delthumb', incoming=True, func=lambda e: e.is_private))
-@register_user
-async def delete_thumbnail(event):
-    """Delete custom thumbnail"""
-    if db.delete_custom_thumbnail(event.sender_id):
-        await event.respond(
-            "✅ **Custom thumbnail removed!**\n\n"
-            "Videos will now use auto-generated thumbnails from the video itself."
-        )
-        LOGGER(__name__).info(f"User {event.sender_id} deleted custom thumbnail")
-    else:
-        await event.respond("ℹ️ **You don't have a custom thumbnail set.**")
-
-@bot.on(events.NewMessage(pattern='/viewthumb', incoming=True, func=lambda e: e.is_private))
-@register_user
-async def view_thumbnail(event):
-    """View current custom thumbnail"""
-    thumb_id = db.get_custom_thumbnail(event.sender_id)
-    if thumb_id:
-        try:
-            await event.respond(
-                "**Your current custom thumbnail**\n\nUse `/delthumb` to remove it.",
-                file=thumb_id
-            )
-        except:
-            await event.respond(
-                "⚠️ **Thumbnail exists but couldn't be displayed.**\n\n"
-                "It might have expired. Please set a new one with `/setthumb`"
-            )
-    else:
-        await event.respond(
-            "ℹ️ **You don't have a custom thumbnail set.**\n\n"
-            "Use `/setthumb` to set one."
-        )
-
 # Admin commands
 @bot.on(events.NewMessage(pattern='/addadmin', incoming=True, func=lambda e: e.is_private))
 async def add_admin_handler(event):
