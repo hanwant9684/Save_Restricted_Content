@@ -59,6 +59,11 @@ None specified yet. Add preferences as they are expressed.
         *   This prevents RAM spikes and crashes on Render by allowing Telethon and file system to fully clear internal buffers and temporary data
     *   **Cloud-Only Backup:** Simplifies backup strategy to use only GitHub for database persistence, with automatic backups every 10 minutes.
     *   **Robust Error Handling:** Includes graceful shutdown mechanisms and proper background task tracking to prevent resource leaks and errors like "Task was destroyed but it is pending!".
+    *   **Paid Media Detection (Dec 2025):** Added handling for Telegram's paid/premium media (`MessageMediaPaidMedia`):
+        *   Detects paid media before download attempt
+        *   Attempts to extract actual media from extended_media container if accessible
+        *   Provides clear error message when paid content cannot be downloaded
+    *   **Thumbnail Generation Optimization (Dec 2025):** Increased ffmpeg timeout from 10s to 30s to reduce thumbnail generation failures for larger video files.
     *   **SQLite Database:** Chosen for its portability and low resource footprint.
     *   **Waitress WSGI Server:** Selected over Flask for its minimal RAM consumption.
     *   **uvloop:** Used for performance enhancement of the event loop.

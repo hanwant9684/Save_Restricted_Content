@@ -602,6 +602,8 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
 @force_subscribe
 @check_download_limit
 async def download_media(event):
+    from queue_manager import download_manager
+    
     command = parse_command(event.text)
     if len(command) < 2:
         await event.respond("**Provide a post URL after the /dl command.**")
@@ -621,7 +623,6 @@ async def download_media(event):
         )
         return
     elif error_code == 'slots_full':
-        from queue_manager import download_manager
         active_count = len(download_manager.active_downloads)
         await event.respond(
             "⏳ **All session slots are currently busy!**\n\n"
