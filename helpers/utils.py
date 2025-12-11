@@ -187,6 +187,7 @@ class ProgressThrottle:
     """
     Centralized progress throttling to prevent Telegram API rate limits.
     Enforces minimum time between updates and handles rate limit errors gracefully.
+    Also tracks transfer progress for accurate speed calculations.
     """
     def __init__(self):
         self.message_throttles = {}  # message_id -> throttle data
@@ -226,6 +227,8 @@ class ProgressThrottle:
             self.message_throttles[message_id] = {
                 'last_update_time': 0,
                 'last_percentage': 0,
+                'last_bytes': 0,
+                'last_speed_time': now,
                 'rate_limited': False,
                 'backoff_duration': 5,  # Start with 5 seconds
                 'cooldown_until': 0
@@ -250,12 +253,33 @@ class ProgressThrottle:
         min_time = throttle['backoff_duration']
         return time_diff >= min_time or percentage_diff >= 10
     
-    def mark_updated(self, message_id, percentage, now):
+    def get_current_speed(self, message_id, current, now):
+        """
+        Calculate current transfer speed based on bytes transferred since last update.
+        Returns speed in bytes per second.
+        """
+        if message_id not in self.message_throttles:
+            return 0
+        
+        throttle = self.message_throttles[message_id]
+        last_bytes = throttle.get('last_bytes', 0)
+        last_time = throttle.get('last_speed_time', now)
+        
+        time_diff = now - last_time
+        bytes_diff = current - last_bytes
+        
+        if time_diff > 0 and bytes_diff > 0:
+            return bytes_diff / time_diff
+        return 0
+    
+    def mark_updated(self, message_id, percentage, now, current_bytes=0):
         """Mark that an update was successfully sent"""
         if message_id in self.message_throttles:
             throttle = self.message_throttles[message_id]
             throttle['last_update_time'] = now
             throttle['last_percentage'] = percentage
+            throttle['last_bytes'] = current_bytes
+            throttle['last_speed_time'] = now
             # Reset backoff on successful update
             throttle['rate_limited'] = False
             throttle['backoff_duration'] = 5
@@ -308,10 +332,17 @@ async def safe_progress_callback(current, total, *args):
         if not _progress_throttle.should_update(message_id, current, total, now):
             return
         
-        # Calculate speed and ETA
+        # Calculate current speed based on bytes transferred since last update
+        # This gives accurate real-time speed instead of average speed
+        current_speed = _progress_throttle.get_current_speed(message_id, current, now)
+        
+        # Fallback to average speed if no previous data (first update)
         elapsed_time = now - start_time
-        speed = current / elapsed_time if elapsed_time > 0 else 0
-        eta = (total - current) / speed if speed > 0 else 0
+        if current_speed == 0 and elapsed_time > 0:
+            current_speed = current / elapsed_time
+        
+        # Calculate ETA based on current speed
+        eta = (total - current) / current_speed if current_speed > 0 else 0
         
         # Import here to avoid circular dependency
         from helpers.files import get_readable_file_size, get_readable_time
@@ -329,12 +360,12 @@ async def safe_progress_callback(current, total, *args):
         progress_bar = f"[{FILLED_BAR[:filled_count]}{EMPTY_BAR[:20-filled_count]}]"
         
         # Visual format with progress bar
-        progress_text = f"**{action}** `{pct}%`\n{progress_bar}\n{get_readable_file_size(current)}/{get_readable_file_size(total)} • {get_readable_file_size(speed)}/s • {get_readable_time(int(eta))}"
+        progress_text = f"**{action}** `{pct}%`\n{progress_bar}\n{get_readable_file_size(current)}/{get_readable_file_size(total)} • {get_readable_file_size(current_speed)}/s • {get_readable_time(int(eta))}"
         
         # Try to update message
         await progress_message.edit(progress_text)
-        # Mark successful update
-        _progress_throttle.mark_updated(message_id, percentage, now)
+        # Mark successful update with current bytes for next speed calculation
+        _progress_throttle.mark_updated(message_id, percentage, now, current)
             
     except Exception as e:
         error_str = str(e).lower()
