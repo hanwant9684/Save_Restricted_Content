@@ -38,8 +38,8 @@ IS_CONSTRAINED = bool(
 
 # Tiered connection scaling for RAM optimization (uploads only - downloads use streaming)
 # Each connection uses ~5-10MB RAM
-# StringSession uses minimal RAM so we can use 8 connections for all sizes
-MAX_UPLOAD_CONNECTIONS = 8 if IS_CONSTRAINED else 8
+# StringSession uses minimal RAM so we can use 16 connections for all sizes
+MAX_UPLOAD_CONNECTIONS = 16 if IS_CONSTRAINED else 16
 
 async def download_media_fast(
     client: TelegramClient,
@@ -187,31 +187,31 @@ def _optimized_connection_count_upload(file_size, max_count=MAX_UPLOAD_CONNECTIO
     With 10 concurrent uploads possible, we must be very conservative.
     
     CONSTRAINED (Replit/Render - 512MB RAM):
-    - Files >= 1GB: 8 connections - StringSession uses minimal RAM
-    - Files 50MB-1GB: 8 connections - StringSession uses minimal RAM
-    - Files < 50MB: 8 connections - StringSession uses minimal RAM
+    - Files >= 1GB: 16 connections - StringSession uses minimal RAM
+    - Files 50MB-1GB: 16 connections - StringSession uses minimal RAM
+    - Files < 50MB: 16 connections - StringSession uses minimal RAM
     
     NON-CONSTRAINED (standard servers):
-    - Files >= 1GB: 8 connections
-    - Files 50MB-1GB: 8 connections
-    - Files < 50MB: 8 connections
+    - Files >= 1GB: 16 connections
+    - Files 50MB-1GB: 16 connections
+    - Files < 50MB: 16 connections
     
     IMPORTANT: Uses MAX_UPLOAD_CONNECTIONS as ceiling to stay within memory limits.
     """
     if IS_CONSTRAINED:
         if file_size >= 1024 * 1024 * 1024:  # 1GB+
-            return min(8, MAX_UPLOAD_CONNECTIONS)
+            return min(16, MAX_UPLOAD_CONNECTIONS)
         elif file_size >= 50 * 1024 * 1024:  # 50MB-1GB
-            return min(8, MAX_UPLOAD_CONNECTIONS)
+            return min(16, MAX_UPLOAD_CONNECTIONS)
         else:  # < 50MB
-            return min(8, MAX_UPLOAD_CONNECTIONS)
+            return min(16, MAX_UPLOAD_CONNECTIONS)
     else:
         if file_size >= 1024 * 1024 * 1024:  # 1GB+
-            return min(8, MAX_UPLOAD_CONNECTIONS)
+            return min(16, MAX_UPLOAD_CONNECTIONS)
         elif file_size >= 50 * 1024 * 1024:  # 50MB-1GB
-            return min(8, MAX_UPLOAD_CONNECTIONS)
+            return min(16, MAX_UPLOAD_CONNECTIONS)
         else:  # < 50MB
-            return min(8, MAX_UPLOAD_CONNECTIONS)
+            return min(16, MAX_UPLOAD_CONNECTIONS)
 
 # Apply optimized upload connection count to FastTelethon
 ParallelTransferrer._get_connection_count = staticmethod(_optimized_connection_count_upload)
