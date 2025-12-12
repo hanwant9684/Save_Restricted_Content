@@ -244,7 +244,7 @@ class SessionManager:
         return len(self.active_sessions)
 
 # Global session manager instance (import this in other modules)
-# Limit to 3 sessions on Render/Replit (3 * 70MB = ~210MB)
+# Limit to 5 sessions on Render/Replit (5 * 70MB = ~350MB, fits in 512MB with headroom)
 # Limit to 5 sessions on normal deployment (5 * 70MB = ~350MB)
 import os
 IS_CONSTRAINED = bool(
@@ -254,6 +254,6 @@ IS_CONSTRAINED = bool(
     os.getenv('REPL_ID')
 )
 
-MAX_SESSIONS = 3 if IS_CONSTRAINED else 5
+MAX_SESSIONS = 5 if IS_CONSTRAINED else 5
 IDLE_TIMEOUT_MINUTES = 10  # Reduced from 30 since smart timeout protects active downloads
 session_manager = SessionManager(max_sessions=MAX_SESSIONS, idle_timeout_minutes=IDLE_TIMEOUT_MINUTES)
