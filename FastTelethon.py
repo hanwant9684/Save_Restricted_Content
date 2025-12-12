@@ -118,7 +118,12 @@ class ParallelTransferrer:
         self.upload_ticker = 0
 
     async def _cleanup(self) -> None:
-        await asyncio.gather(*[sender.disconnect() for sender in self.senders])
+        if not self.senders:
+            return
+        try:
+            await asyncio.gather(*[sender.disconnect() for sender in self.senders], return_exceptions=True)
+        except Exception:
+            pass
         self.senders = None
 
     @staticmethod
@@ -141,14 +146,42 @@ class ParallelTransferrer:
 
         # The first cross-DC sender will export+import the authorization, so we always create it
         # before creating any other senders.
-        self.senders = [
-            await self._create_download_sender(file, 0, part_size, connections * part_size,
-                                               get_part_count()),
-            *await asyncio.gather(
+        # Use try/finally to cleanup partially created senders on failure
+        temp_senders = []
+        try:
+            first_sender = await self._create_download_sender(file, 0, part_size, connections * part_size,
+                                                              get_part_count())
+            temp_senders.append(first_sender)
+            
+            # Use return_exceptions=True to capture all results including failures
+            # This prevents exceptions from cancelling successful senders
+            results = await asyncio.gather(
                 *[self._create_download_sender(file, i, part_size, connections * part_size,
                                                get_part_count())
-                  for i in range(1, connections)])
-        ]
+                  for i in range(1, connections)],
+                return_exceptions=True)
+            
+            # Check for any exceptions and collect successful senders
+            for result in results:
+                if isinstance(result, Exception):
+                    # Cleanup all successful senders before raising
+                    for sender in temp_senders:
+                        try:
+                            await sender.disconnect()
+                        except Exception:
+                            pass
+                    raise result
+                temp_senders.append(result)
+            
+            self.senders = temp_senders
+        except Exception:
+            # Cleanup any senders that were created before the failure
+            for sender in temp_senders:
+                try:
+                    await sender.disconnect()
+                except Exception:
+                    pass
+            raise
 
     async def _create_download_sender(self, file: TypeLocation, index: int, part_size: int,
                                       stride: int,
@@ -158,12 +191,40 @@ class ParallelTransferrer:
 
     async def _init_upload(self, connections: int, file_id: int, part_count: int, big: bool
                            ) -> None:
-        self.senders = [
-            await self._create_upload_sender(file_id, part_count, big, 0, connections),
-            *await asyncio.gather(
+        # Use try/except to cleanup partially created senders on failure
+        temp_senders = []
+        try:
+            first_sender = await self._create_upload_sender(file_id, part_count, big, 0, connections)
+            temp_senders.append(first_sender)
+            
+            # Use return_exceptions=True to capture all results including failures
+            # This prevents exceptions from cancelling successful senders
+            results = await asyncio.gather(
                 *[self._create_upload_sender(file_id, part_count, big, i, connections)
-                  for i in range(1, connections)])
-        ]
+                  for i in range(1, connections)],
+                return_exceptions=True)
+            
+            # Check for any exceptions and collect successful senders
+            for result in results:
+                if isinstance(result, Exception):
+                    # Cleanup all successful senders before raising
+                    for sender in temp_senders:
+                        try:
+                            await sender.disconnect()
+                        except Exception:
+                            pass
+                    raise result
+                temp_senders.append(result)
+            
+            self.senders = temp_senders
+        except Exception:
+            # Cleanup any senders that were created before the failure
+            for sender in temp_senders:
+                try:
+                    await sender.disconnect()
+                except Exception:
+                    pass
+            raise
 
     async def _create_upload_sender(self, file_id: int, part_count: int, big: bool, index: int,
                                     stride: int) -> UploadSender:
@@ -212,21 +273,22 @@ class ParallelTransferrer:
                   f"{connection_count} {part_size} {part_count} {file!s}")
         await self._init_download(connection_count, file, part_count, part_size)
 
-        part = 0
-        while part < part_count:
-            tasks = []
-            for sender in self.senders:
-                tasks.append(self.loop.create_task(sender.next()))
-            for task in tasks:
-                data = await task
-                if not data:
-                    break
-                yield data
-                part += 1
-                log.debug(f"Part {part} downloaded")
-
-        log.debug("Parallel download finished, cleaning up connections")
-        await self._cleanup()
+        try:
+            part = 0
+            while part < part_count:
+                tasks = []
+                for sender in self.senders:
+                    tasks.append(self.loop.create_task(sender.next()))
+                for task in tasks:
+                    data = await task
+                    if not data:
+                        break
+                    yield data
+                    part += 1
+                    log.debug(f"Part {part} downloaded")
+        finally:
+            log.debug("Parallel download finished, cleaning up connections")
+            await self._cleanup()
 
 
 parallel_transfer_locks: DefaultDict[int, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
@@ -254,28 +316,30 @@ async def _internal_transfer_to_telegram(client: TelegramClient,
     uploader = ParallelTransferrer(client)
     part_size, part_count, is_large = await uploader.init_upload(file_id, file_size)
     buffer = bytearray()
-    for data in stream_file(response):
-        if progress_callback:
-            r = progress_callback(response.tell(), file_size)
-            if inspect.isawaitable(r):
-                await r
-        if not is_large:
-            hash_md5.update(data)
-        if len(buffer) == 0 and len(data) == part_size:
-            await uploader.upload(data)
-            continue
-        new_len = len(buffer) + len(data)
-        if new_len >= part_size:
-            cutoff = part_size - len(buffer)
-            buffer.extend(data[:cutoff])
+    try:
+        for data in stream_file(response):
+            if progress_callback:
+                r = progress_callback(response.tell(), file_size)
+                if inspect.isawaitable(r):
+                    await r
+            if not is_large:
+                hash_md5.update(data)
+            if len(buffer) == 0 and len(data) == part_size:
+                await uploader.upload(data)
+                continue
+            new_len = len(buffer) + len(data)
+            if new_len >= part_size:
+                cutoff = part_size - len(buffer)
+                buffer.extend(data[:cutoff])
+                await uploader.upload(bytes(buffer))
+                buffer.clear()
+                buffer.extend(data[cutoff:])
+            else:
+                buffer.extend(data)
+        if len(buffer) > 0:
             await uploader.upload(bytes(buffer))
-            buffer.clear()
-            buffer.extend(data[cutoff:])
-        else:
-            buffer.extend(data)
-    if len(buffer) > 0:
-        await uploader.upload(bytes(buffer))
-    await uploader.finish_upload()
+    finally:
+        await uploader.finish_upload()
     if is_large:
         return InputFileBig(file_id, part_count, file_name), file_size
     else:
