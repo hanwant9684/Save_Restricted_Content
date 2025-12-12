@@ -111,10 +111,11 @@ class MemoryMonitor:
         }
     
     def log_memory_snapshot(self, operation="", context="", silent=False):
-        """Log memory snapshot. Always shows real RAM usage."""
+        """Log memory snapshot. Set silent=True for routine operations."""
         mem = self.get_memory_info()
         state = self.get_detailed_state()
         
+        # Store operation history
         snapshot = (
             datetime.now().strftime("%H:%M:%S"),
             operation or '',
@@ -123,21 +124,25 @@ class MemoryMonitor:
         )
         self.operation_history.append(snapshot)
         
-        session_info = f"S:{state['active_sessions']}/3 D:{state['active_downloads']}/3"
-        
+        # Check for critical memory (near crash)
         if mem['rss_mb'] > 480:
-            critical_msg = f"🚨 CRITICAL: {mem['rss_mb']:.0f}MB [{session_info}] - {operation}"
+            critical_msg = f"🚨 CRITICAL: {mem['rss_mb']:.0f}MB - Sessions:{state['active_sessions']} DLs:{state['active_downloads']} - {operation}"
             self.logger.error(critical_msg)
             self._write_to_memory_log(critical_msg, force_write=True)
+            return mem
+        
+        # Check for memory spike
+        memory_increase = mem['rss_mb'] - self.last_memory_mb
+        if memory_increase > self.spike_threshold_mb:
+            self.logger.warning(f"⚠️ Memory spike: +{memory_increase:.0f}MB ({mem['rss_mb']:.0f}MB total) - {operation}")
+            self._write_to_memory_log(f"Memory spike: +{memory_increase:.0f}MB - {operation}")
         elif mem['rss_mb'] > self.memory_threshold_mb:
-            self.logger.warning(f"⚠️ HIGH: {mem['rss_mb']:.0f}MB [{session_info}] - {operation}")
+            self.logger.warning(f"⚠️ High memory: {mem['rss_mb']:.0f}MB - {operation}")
             self._write_to_memory_log(f"High memory: {mem['rss_mb']:.0f}MB - {operation}")
-        elif mem['rss_mb'] > 300:
-            self.logger.warning(f"⚠️ ELEVATED: {mem['rss_mb']:.0f}MB [{session_info}] - {operation}")
-        else:
-            memory_increase = mem['rss_mb'] - self.last_memory_mb
-            if not silent or abs(memory_increase) > 20:
-                self.logger.info(f"📊 RAM: {mem['rss_mb']:.0f}MB [{session_info}] - {operation}")
+        elif not silent:
+            # Only log if not silent and memory is concerning (>300MB)
+            if mem['rss_mb'] > 300:
+                self.logger.info(f"Memory: {mem['rss_mb']:.0f}MB - {operation}")
         
         self.last_memory_mb = mem['rss_mb']
         return mem
@@ -176,23 +181,17 @@ class MemoryMonitor:
             self.logger.error(f"❌ {operation_name} failed: {str(e)} (Memory: {mem_error['rss_mb']:.0f}MB)")
             raise
     
-    def track_download_start(self, file_size_mb, user_id):
-        self.log_memory_snapshot("DL Start", f"User {user_id}: {file_size_mb:.0f}MB file", silent=False)
+    def track_download(self, file_size_mb, user_id):
+        self.log_memory_snapshot("Download", f"User {user_id}: {file_size_mb:.0f}MB file", silent=True)
     
-    def track_download_end(self, file_size_mb, user_id):
-        self.log_memory_snapshot("DL End", f"User {user_id}: {file_size_mb:.0f}MB file", silent=False)
-    
-    def track_upload_start(self, file_size_mb, user_id):
-        self.log_memory_snapshot("UL Start", f"User {user_id}: {file_size_mb:.0f}MB file", silent=False)
-    
-    def track_upload_end(self, file_size_mb, user_id):
-        self.log_memory_snapshot("UL End", f"User {user_id}: {file_size_mb:.0f}MB file", silent=False)
+    def track_upload(self, file_size_mb, user_id):
+        self.log_memory_snapshot("Upload", f"User {user_id}: {file_size_mb:.0f}MB file", silent=True)
     
     def track_session_creation(self, user_id):
-        self.log_memory_snapshot("Session+", f"User {user_id}", silent=False)
+        self.log_memory_snapshot("Session", f"User {user_id}", silent=True)
     
     def track_session_cleanup(self, user_id):
-        self.log_memory_snapshot("Session-", f"User {user_id}", silent=False)
+        self.log_memory_snapshot("Cleanup", f"User {user_id}", silent=True)
     
     def get_memory_state_for_endpoint(self):
         """Get current memory state for /memory-debug endpoint."""
@@ -237,16 +236,23 @@ class MemoryMonitor:
         while True:
             try:
                 await asyncio.sleep(interval)
-                self.log_memory_snapshot("Periodic Check", "", silent=False)
-                
                 mem = self.get_memory_info()
+                
+                # Only log and act if memory is high
                 if mem['rss_mb'] > self.memory_threshold_mb:
+                    self.logger.warning(f"⚠️ Periodic check: {mem['rss_mb']:.0f}MB - triggering GC")
+                    self._write_to_memory_log(f"Periodic: {mem['rss_mb']:.0f}MB - auto GC")
+                    
                     import gc
                     collected = gc.collect()
                     mem_after = self.get_memory_info()
                     freed = mem['rss_mb'] - mem_after['rss_mb']
+                    
                     if freed > 5:
                         self.logger.info(f"GC freed {freed:.0f}MB ({collected} objects)")
+                else:
+                    # Silent tracking - just store in history
+                    self.log_memory_snapshot("Periodic", "", silent=True)
                     
             except Exception as e:
                 self.logger.error(f"Periodic monitor error: {e}")
