@@ -66,9 +66,9 @@ def create_ram_logging_callback(original_callback: Optional[Callable], file_size
 
 IS_CONSTRAINED = False
 
-MAX_CONNECTIONS = 10
-MAX_UPLOAD_CONNECTIONS = 10
-MAX_DOWNLOAD_CONNECTIONS = 10
+MAX_CONNECTIONS = 20
+MAX_UPLOAD_CONNECTIONS = 20
+MAX_DOWNLOAD_CONNECTIONS = 20
 
 async def download_media_fast(
     client: TelegramClient,
