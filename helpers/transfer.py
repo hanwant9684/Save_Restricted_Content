@@ -130,7 +130,8 @@ async def download_media_fast(
                     location=media_location,
                     out=f,
                     progress_callback=ram_callback,
-                    file_size=file_size
+                    file_size=file_size,
+                    connection_count=connection_count
                 )
             end_ram = get_ram_usage_mb()
             LOGGER(__name__).info(f"[RAM] DOWNLOAD COMPLETE: {file_name} - RAM before GC: {end_ram:.1f}MB")
@@ -185,7 +186,8 @@ async def upload_media_fast(
         result = await fast_upload(
             client=client,
             file=file_handle,
-            progress_callback=ram_callback
+            progress_callback=ram_callback,
+            connection_count=connection_count
         )
         
         end_ram = get_ram_usage_mb()
@@ -211,26 +213,34 @@ async def upload_media_fast(
 
 def _optimized_connection_count_upload(file_size, max_count=MAX_UPLOAD_CONNECTIONS, full_size=100*1024*1024):
     """
-    HIGH-SPEED: Always use maximum connections for fastest uploads (~20MB/s).
-    20 parallel connections provide optimal throughput on Telegram's infrastructure.
+    HIGH-SPEED: Optimized connections for fastest uploads.
+    20 parallel connections for large files, scaled down for smaller files.
     """
     if file_size >= 10 * 1024 * 1024:  # 10MB+
         return MAX_UPLOAD_CONNECTIONS  # 20 connections
     elif file_size >= 1 * 1024 * 1024:  # 1MB-10MB
+        return min(15, MAX_UPLOAD_CONNECTIONS)
+    elif file_size >= 100 * 1024:  # 100KB-1MB
         return min(10, MAX_UPLOAD_CONNECTIONS)
-    else:  # < 1MB
-        return min(4, MAX_UPLOAD_CONNECTIONS)
+    elif file_size >= 10 * 1024:  # 10KB-100KB
+        return min(8, MAX_UPLOAD_CONNECTIONS)
+    else:  # < 10KB
+        return min(5, MAX_UPLOAD_CONNECTIONS)
 
 def _optimized_connection_count_download(file_size, max_count=MAX_DOWNLOAD_CONNECTIONS, full_size=100*1024*1024):
     """
-    HIGH-SPEED: Always use maximum connections for fastest downloads (~20MB/s).
-    20 parallel connections provide optimal throughput on Telegram's infrastructure.
+    HIGH-SPEED: Optimized connections for fastest downloads.
+    20 parallel connections for large files, scaled down for smaller files.
     """
     if file_size >= 10 * 1024 * 1024:  # 10MB+
         return MAX_DOWNLOAD_CONNECTIONS  # 20 connections
     elif file_size >= 1 * 1024 * 1024:  # 1MB-10MB
+        return min(15, MAX_DOWNLOAD_CONNECTIONS)
+    elif file_size >= 100 * 1024:  # 100KB-1MB
         return min(10, MAX_DOWNLOAD_CONNECTIONS)
-    else:  # < 1MB
-        return min(4, MAX_DOWNLOAD_CONNECTIONS)
+    elif file_size >= 10 * 1024:  # 10KB-100KB
+        return min(8, MAX_DOWNLOAD_CONNECTIONS)
+    else:  # < 10KB
+        return min(5, MAX_DOWNLOAD_CONNECTIONS)
 
 ParallelTransferrer._get_connection_count = staticmethod(_optimized_connection_count_upload)
