@@ -38,6 +38,7 @@ class DownloadSender:
     request: GetFileRequest
     remaining: int
     stride: int
+    _lock: asyncio.Lock  # Prevent concurrent reads on same sender
 
     def __init__(self, client: TelegramClient, sender: MTProtoSender, file: TypeLocation, offset: int, limit: int,
                  stride: int, count: int) -> None:
@@ -46,31 +47,33 @@ class DownloadSender:
         self.request = GetFileRequest(file, offset=offset, limit=limit)
         self.stride = stride
         self.remaining = count
+        self._lock = asyncio.Lock()  # Initialize lock per sender
 
     async def next(self) -> Optional[bytes]:
-        if not self.remaining:
-            return None
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                result = await self.client._call(self.sender, self.request)
-                self.remaining -= 1
-                self.request.offset += self.stride
-                return result.bytes
-            except Exception as e:
-                error_str = str(e).lower()
-                if 'flood' in error_str or '420' in str(type(e).__name__):
-                    import re
-                    wait_match = re.search(r'(\d+)', str(e))
-                    wait_time = int(wait_match.group(1)) if wait_match else 5
-                    wait_time = min(wait_time, 30)
-                    log.warning(f"FLOOD_WAIT detected, waiting {wait_time}s (attempt {attempt+1}/{max_retries})")
-                    await asyncio.sleep(wait_time)
-                    if attempt == max_retries - 1:
+        async with self._lock:  # Serialize access to this sender
+            if not self.remaining:
+                return None
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    result = await self.client._call(self.sender, self.request)
+                    self.remaining -= 1
+                    self.request.offset += self.stride
+                    return result.bytes
+                except Exception as e:
+                    error_str = str(e).lower()
+                    if 'flood' in error_str or '420' in str(type(e).__name__):
+                        import re
+                        wait_match = re.search(r'(\d+)', str(e))
+                        wait_time = int(wait_match.group(1)) if wait_match else 5
+                        wait_time = min(wait_time, 30)
+                        log.warning(f"FLOOD_WAIT detected, waiting {wait_time}s (attempt {attempt+1}/{max_retries})")
+                        await asyncio.sleep(wait_time)
+                        if attempt == max_retries - 1:
+                            raise
+                    else:
                         raise
-                else:
-                    raise
-        return None
+            return None
 
     def disconnect(self) -> Awaitable[None]:
         return self.sender.disconnect()
