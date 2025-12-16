@@ -1,4 +1,4 @@
-# Copyright (C) @TheSmartBisnu
+# Copyright (C) @Wolfy004
 # Migrated to Telethon
 
 from typing import Optional, List
