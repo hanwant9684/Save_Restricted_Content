@@ -244,8 +244,8 @@ async def help_command(event):
             "   📺 Videos • 🖼️ Photos • 🎵 Audio • 📄 Documents\n\n"
             "**Batch Download:**\n"
             "   `/bdl <start_link> <end_link>`\n"
-            "   💡 Example: `/bdl https://t.me/channel/100 https://t.me/channel/120`\n"
-            "   📦 Downloads all posts from 100 to 120 (max 20)\n\n"
+            "   💡 Example: `/bdl https://t.me/channel/100 https://t.me/channel/150`\n"
+            "   📦 Downloads all posts from 100 to 150 (max 50)\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "📊 **Download Status:**\n\n"
             "   `/status` - Check your download status\n"
@@ -264,7 +264,7 @@ async def help_command(event):
             "💡 **Your Benefits:**\n"
             "   ✅ Unlimited downloads\n"
             "   ✅ Priority access\n"
-            "   ✅ Batch download (up to 20 posts)\n"
+            "   ✅ Batch download (up to 50 posts)\n"
             "   ✅ No daily limits"
         )
     else:
@@ -671,7 +671,7 @@ async def download_range(event):
             "🚀 **Batch Download Process**\n"
             "`/bdl start_link end_link`\n\n"
             "💡 **Example:**\n"
-            "`/bdl https://t.me/mychannel/100 https://t.me/mychannel/120`"
+            "`/bdl https://t.me/mychannel/100 https://t.me/mychannel/150`"
         )
         return
 
@@ -711,12 +711,12 @@ async def download_range(event):
     if start_id > end_id:
         return await event.respond("**❌ Invalid range: start ID cannot exceed end ID.**")
     
-    # Limit batch to 20 posts at a time
+    # Limit batch to 50 posts at a time
     batch_count = end_id - start_id + 1
-    if batch_count > 20:
+    if batch_count > 50:
         return await event.respond(
             f"**❌ Batch limit exceeded!**\n\n"
-            f"You requested `{batch_count}` posts, but the maximum is **20 posts** at a time.\n\n"
+            f"You requested `{batch_count}` posts, but the maximum is **50 posts** at a time.\n\n"
             f"Please reduce your range and try again."
         )
 
@@ -1368,7 +1368,7 @@ async def upgrade_command(event):
         "**Premium Features:**\n"
         "✅ Unlimited downloads per day\n"
         "✅ Batch download support (/bdl command)\n"
-        "✅ Download up to 20 posts at once\n"
+        "✅ Download up to 50 posts at once\n"
         "✅ Priority support\n"
         "✅ No daily limits\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1514,7 +1514,7 @@ async def callback_handler(event):
             "**Premium Features:**\n"
             "✅ Unlimited downloads per day\n"
             "✅ Batch download support (/bdl command)\n"
-            "✅ Download up to 20 posts at once\n"
+            "✅ Download up to 50 posts at once\n"
             "✅ Priority support\n"
             "✅ No daily limits\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1630,7 +1630,7 @@ async def callback_handler(event):
             "**Premium Features:**\n"
             "✅ Unlimited downloads per day\n"
             "✅ Batch download support (/bdl command)\n"
-            "✅ Download up to 20 posts at once\n"
+            "✅ Download up to 50 posts at once\n"
             "✅ Priority support\n"
             "✅ No daily limits\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n\n"
