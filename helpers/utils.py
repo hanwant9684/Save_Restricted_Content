@@ -1,4 +1,4 @@
-# Copyright (C) @TheSmartBisnu
+# Copyright (C) @Wolfy004
 # Telethon-compatible version
 
 import os
