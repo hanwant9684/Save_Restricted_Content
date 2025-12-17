@@ -205,8 +205,8 @@ async def start(event):
         "   📺 Complete quick verification steps\n"
         "   ♻️ Repeat anytime!\n"
         "   👉 Use: `/getpremium`\n\n"
-        "💰 **Option 2: Paid ($1/month)**\n"
-        "   ⭐ 30 days unlimited access\n"
+        "💰 **Option 2: Paid ($2/month)**\n"
+        "   ⭐ 7/15/30 days unlimited access\n"
         "   🚀 Priority downloads\n"
         "   📦 Batch download support\n"
         "   👉 Use: `/upgrade`\n\n"
@@ -284,9 +284,9 @@ async def help_command(event):
             "   `/getpremium` - Get 5 free download\n"
             "   📺 Complete verification steps\n"
             "   ♻️ Repeat anytime!\n\n"
-            "💰 **Paid Premium ($1/month):**\n"
+            "💰 **Paid Premium ($2/month):**\n"
             "   `/upgrade` - View payment options\n"
-            "   ⭐ 30 days unlimited access\n"
+            "   ⭐ 7/15/30 days unlimited access\n"
             "   🚀 Priority downloads\n"
             "   📦 Batch download support\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1383,7 +1383,7 @@ async def upgrade_command(event):
         f"5️⃣ Enjoy {PREMIUM_DOWNLOADS} free downloads! 🎉\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "**💰 Option 2: Monthly Subscription**\n"
-        "💵 **30 Days Premium = $1 USD**\n\n"
+        "💵 **7/15/30 Days Premium = $1/$1.5/$2 USD**\n\n"
         "**How to Subscribe:**\n"
     )
     
@@ -1391,16 +1391,16 @@ async def upgrade_command(event):
     payment_methods_available = PyroConf.PAYPAL_URL or PyroConf.UPI_ID or PyroConf.TELEGRAM_TON or PyroConf.CRYPTO_ADDRESS
     
     if payment_methods_available:
-        upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n"
+        upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n\n"
         
         if PyroConf.PAYPAL_URL:
-            upgrade_text += f"   💳 **PayPal:** {PyroConf.PAYPAL_URL}\n"
+            upgrade_text += f"   💳 **PayPal:** {PyroConf.PAYPAL_URL}\n\n"
         
         if PyroConf.UPI_ID:
-            upgrade_text += f"   📱 **UPI (India):** `{PyroConf.UPI_ID}`\n"
+            upgrade_text += f"   📱 **UPI (India):** `{PyroConf.UPI_ID}`\n\n"
         
         if PyroConf.TELEGRAM_TON:
-            upgrade_text += f"   🛒 **Telegram Pay (TON):** `{PyroConf.TELEGRAM_TON}`\n"
+            upgrade_text += f"   🛒 **Telegram Pay (TON):** `{PyroConf.TELEGRAM_TON}`\n\n"
         
         if PyroConf.CRYPTO_ADDRESS:
             upgrade_text += f"   ₿ **Crypto (USDT/BTC/ETH):** `{PyroConf.CRYPTO_ADDRESS}`\n"
@@ -1529,23 +1529,23 @@ async def callback_handler(event):
             f"5️⃣ Enjoy {PREMIUM_DOWNLOADS} free downloads! 🎉\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "**💰 Option 2: Monthly Subscription**\n"
-            "💵 **30 Days Premium = $1 USD**\n\n"
+            "💵 **7/15/30 Days Premium = $1/$1.5/$2 USD**\n\n"
             "**How to Subscribe:**\n"
         )
         
         payment_methods_available = PyroConf.PAYPAL_URL or PyroConf.UPI_ID or PyroConf.TELEGRAM_TON or PyroConf.CRYPTO_ADDRESS
         
         if payment_methods_available:
-            upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n"
+            upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n\n"
             
             if PyroConf.PAYPAL_URL:
-                upgrade_text += f"   💳 **PayPal:** {PyroConf.PAYPAL_URL}\n"
+                upgrade_text += f"   💳 **PayPal:** {PyroConf.PAYPAL_URL}\n\n"
             
             if PyroConf.UPI_ID:
-                upgrade_text += f"   📱 **UPI (India):** `{PyroConf.UPI_ID}`\n"
+                upgrade_text += f"   📱 **UPI (India):** `{PyroConf.UPI_ID}`\n\n"
             
             if PyroConf.TELEGRAM_TON:
-                upgrade_text += f"   🛒 **Telegram Pay (TON):** `{PyroConf.TELEGRAM_TON}`\n"
+                upgrade_text += f"   🛒 **Telegram Pay (TON):** `{PyroConf.TELEGRAM_TON}`\n\n"
             
             if PyroConf.CRYPTO_ADDRESS:
                 upgrade_text += f"   ₿ **Crypto (USDT/BTC/ETH):** `{PyroConf.CRYPTO_ADDRESS}`\n"
@@ -1645,23 +1645,23 @@ async def callback_handler(event):
             f"5️⃣ Enjoy {PREMIUM_DOWNLOADS} free download! 🎉\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "**💰 Option 2: Monthly Subscription**\n"
-            "💵 **30 Days Premium = $1 USD**\n\n"
+            "💵 **7/15/30 Days Premium = $1/$1.5/$2 USD**\n\n"
             "**How to Subscribe:**\n"
         )
         
         payment_methods_available = PyroConf.PAYPAL_URL or PyroConf.UPI_ID or PyroConf.TELEGRAM_TON or PyroConf.CRYPTO_ADDRESS
         
         if payment_methods_available:
-            upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n"
+            upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n\n"
             
             if PyroConf.PAYPAL_URL:
-                upgrade_text += f"   💳 **PayPal:** {PyroConf.PAYPAL_URL}\n"
+                upgrade_text += f"   💳 **PayPal:** {PyroConf.PAYPAL_URL}\n\n"
             
             if PyroConf.UPI_ID:
-                upgrade_text += f"   📱 **UPI (India):** `{PyroConf.UPI_ID}`\n"
+                upgrade_text += f"   📱 **UPI (India):** `{PyroConf.UPI_ID}`\n\n"
             
             if PyroConf.TELEGRAM_TON:
-                upgrade_text += f"   🛒 **Telegram Pay (TON):** `{PyroConf.TELEGRAM_TON}`\n"
+                upgrade_text += f"   🛒 **Telegram Pay (TON):** `{PyroConf.TELEGRAM_TON}`\n\n"
             
             if PyroConf.CRYPTO_ADDRESS:
                 upgrade_text += f"   ₿ **Crypto (USDT/BTC/ETH):** `{PyroConf.CRYPTO_ADDRESS}`\n"
