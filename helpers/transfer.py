@@ -114,16 +114,10 @@ class ConnectionAllocator:
             active_count = len(self._active_transfers) + 1
             fair_share = self.total_connections // active_count
             
-            if file_size >= 10 * 1024 * 1024:
-                size_weight = 1.0
-            elif file_size >= 1 * 1024 * 1024:
-                size_weight = 0.8
-            elif file_size >= 100 * 1024:
-                size_weight = 0.6
-            else:
-                size_weight = 0.4
-            
-            allocated = int(fair_share * size_weight)
+            # FIXED: Use full connection allocation regardless of file size
+            # Small files benefit from more connections just as much as large files
+            # The min_per_transfer already ensures a reasonable floor
+            allocated = fair_share
             allocated = max(self.min_per_transfer, min(allocated, self.max_per_transfer))
             allocated = min(allocated, available)
             
