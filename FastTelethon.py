@@ -59,13 +59,21 @@ class DownloadSender:
                 return result.bytes
             except Exception as e:
                 error_str = str(e).lower()
-                if 'flood' in error_str or '420' in str(type(e).__name__):
-                    import re
-                    wait_match = re.search(r'(\d+)', str(e))
-                    wait_time = int(wait_match.group(1)) if wait_match else 5
-                    wait_time = min(wait_time, 30)
-                    log.warning(f"FLOOD_WAIT detected, waiting {wait_time}s (attempt {attempt+1}/{max_retries})")
-                    await asyncio.sleep(wait_time)
+              # In FastTelethon.py, line 62-68, replace with:
+except Exception as e:
+    error_str = str(e).lower()
+    if 'flood' in error_str or '420' in str(type(e).__name__):
+        import re
+        wait_match = re.search(r'(\d+)', str(e))
+        wait_time = int(wait_match.group(1)) if wait_match else 5
+        wait_time = min(wait_time, 60)  # Increased from 30s to 60s max
+        
+        # Exponential backoff:  increase wait on retries
+        if attempt > 0:
+            wait_time *= (2 ** (attempt - 1))  # 5s → 10s → 20s
+        
+        log.warning(f"FLOOD_WAIT detected, waiting {wait_time}s (attempt {attempt+1}/{max_retries})")
+        await asyncio.sleep(wait_time)
                     if attempt == max_retries - 1:
                         raise
                 else:
