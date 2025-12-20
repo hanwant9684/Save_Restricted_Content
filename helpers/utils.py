@@ -492,8 +492,13 @@ async def safe_progress_callback(current, total, *args):
         # Visual format with progress bar
         progress_text = f"**{action}** `{pct}%`\n{progress_bar}\n{get_readable_file_size(current)}/{get_readable_file_size(total)} • {get_readable_file_size(current_speed)}/s • {get_readable_time(int(eta))}"
         
-        # Try to update message
-        await progress_message.edit(progress_text)
+        # Update message without blocking download (fire and forget)
+        # Using create_task instead of await prevents blocking the download stream
+        try:
+            asyncio.create_task(progress_message.edit(progress_text))
+        except RuntimeError:
+            # If no event loop is running, do synchronous edit
+            await progress_message.edit(progress_text)
         # Mark successful update with current bytes for next speed calculation
         _progress_throttle.mark_updated(message_id, percentage, now, current)
             

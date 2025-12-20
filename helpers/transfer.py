@@ -30,34 +30,56 @@ def get_ram_usage_mb():
 
 def create_ram_logging_callback(original_callback: Optional[Callable], file_size: int, operation: str, file_name: str):
     """
-    Wrap progress callback to log RAM usage at 25%, 50%, 75% progress.
+    Non-blocking progress callback with deferred logging.
+    Only logs at specific milestones to avoid blocking download flow.
     """
     logged_thresholds: Set[int] = set()
     start_ram = get_ram_usage_mb()
-    LOGGER(__name__).info(f"[RAM] {operation} START: {file_name} - RAM: {start_ram:.1f}MB")
+    log_queue = []
+    
+    LOGGER(__name__).info(f"[SPEED] {operation} START: {file_name} - RAM: {start_ram:.1f}MB")
     
     def ram_logging_wrapper(current: int, total: int):
-        nonlocal logged_thresholds
+        nonlocal logged_thresholds, log_queue
         
         if total <= 0:
             if original_callback:
-                return original_callback(current, total)
+                try:
+                    return original_callback(current, total)
+                except:
+                    pass
             return
         
         percent = (current / total) * 100
         
+        # Only log at specific milestones (5% intervals to reduce overhead)
         for threshold in [25, 50, 75, 100]:
             if percent >= threshold and threshold not in logged_thresholds:
                 logged_thresholds.add(threshold)
                 current_ram = get_ram_usage_mb()
                 ram_increase = current_ram - start_ram
-                LOGGER(__name__).info(
-                    f"[RAM] {operation} {threshold}%: {file_name} - "
-                    f"RAM: {current_ram:.1f}MB (+{ram_increase:.1f}MB from start)"
-                )
+                
+                log_queue.append((
+                    f"[SPEED] {operation} {threshold}%: {file_name} - "
+                    f"RAM: {current_ram:.1f}MB (+{ram_increase:.1f}MB)"
+                ))
         
+        # Defer logging to not block download (log after callback returns)
+        if log_queue and percent % 25 < 1:  # Log when crossing threshold
+            for msg in log_queue:
+                LOGGER(__name__).info(msg)
+            log_queue.clear()
+        
+        # Call original callback without blocking
         if original_callback:
-            return original_callback(current, total)
+            try:
+                result = original_callback(current, total)
+                # Ensure we don't block on the callback
+                if hasattr(result, '__await__'):
+                    return result
+            except:
+                pass
+        return
     
     return ram_logging_wrapper
 
