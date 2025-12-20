@@ -15,6 +15,8 @@ import math
 import inspect
 import psutil
 import gc
+import time
+import socket
 from typing import Optional, Callable, BinaryIO, Set, Dict
 from telethon import TelegramClient, utils
 from telethon.tl.types import Message, Document, TypeMessageMedia, InputPhotoFileLocation, InputDocumentFileLocation, MessageMediaPaidMedia
@@ -23,43 +25,141 @@ from FastTelethon import download_file as fast_download, upload_file as fast_upl
 
 CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
 
+def get_system_diagnostics():
+    """Get comprehensive system diagnostics for troubleshooting"""
+    try:
+        process = psutil.Process(os.getpid())
+        cpu_percent = process.cpu_percent(interval=0.1)
+        mem = process.memory_info()
+        mem_mb = mem.rss / 1024 / 1024
+        num_threads = process.num_threads()
+        num_fds = len(process.open_files()) if hasattr(process, 'open_files') else 0
+        
+        # Network stats
+        net_io = psutil.net_io_counters()
+        
+        # CPU overall
+        cpu_count = psutil.cpu_count()
+        cpu_overall = psutil.cpu_percent(interval=0.1)
+        
+        return {
+            'process_cpu': cpu_percent,
+            'process_mem_mb': round(mem_mb, 1),
+            'threads': num_threads,
+            'open_files': num_fds,
+            'system_cpu': cpu_overall,
+            'cpu_cores': cpu_count,
+            'net_bytes_sent': net_io.bytes_sent,
+            'net_bytes_recv': net_io.bytes_recv
+        }
+    except Exception as e:
+        LOGGER(__name__).debug(f"Failed to get diagnostics: {e}")
+        return {}
+
 def get_ram_usage_mb():
     """Get current RAM usage in MB"""
     process = psutil.Process(os.getpid())
     return process.memory_info().rss / 1024 / 1024
 
-def create_ram_logging_callback(original_callback: Optional[Callable], file_size: int, operation: str, file_name: str):
+def create_speed_monitor_callback(original_callback: Optional[Callable], file_size: int, file_name: str):
     """
-    Wrap progress callback to log RAM usage at 25%, 50%, 75% progress.
+    DETAILED DIAGNOSTICS: Monitor download speed and system state to identify throttling cause.
+    Logs: Speed, CPU, RAM, threads, connections - identifies if issue is CODE/TELEGRAM/RENDER.
     """
-    logged_thresholds: Set[int] = set()
-    start_ram = get_ram_usage_mb()
-    LOGGER(__name__).info(f"[RAM] {operation} START: {file_name} - RAM: {start_ram:.1f}MB")
+    start_time = time.time()
+    last_logged_bytes = 0
+    last_logged_time = start_time
+    last_speed = 0
+    speed_history = []
+    stall_detected = False
+    start_diag = get_system_diagnostics()
     
-    def ram_logging_wrapper(current: int, total: int):
-        nonlocal logged_thresholds
+    def speed_monitor(current: int, total: int):
+        nonlocal last_logged_bytes, last_logged_time, last_speed, stall_detected, speed_history
         
         if total <= 0:
             if original_callback:
                 return original_callback(current, total)
             return
         
-        percent = (current / total) * 100
+        current_time = time.time()
+        elapsed_since_start = current_time - start_time
+        elapsed_since_log = current_time - last_logged_time
         
-        for threshold in [25, 50, 75, 100]:
-            if percent >= threshold and threshold not in logged_thresholds:
-                logged_thresholds.add(threshold)
-                current_ram = get_ram_usage_mb()
-                ram_increase = current_ram - start_ram
-                LOGGER(__name__).info(
-                    f"[RAM] {operation} {threshold}%: {file_name} - "
-                    f"RAM: {current_ram:.1f}MB (+{ram_increase:.1f}MB from start)"
+        # Log speed every 0.5 seconds
+        if elapsed_since_log >= 0.5:
+            bytes_transferred = current - last_logged_bytes
+            current_speed_mb_s = bytes_transferred / (1024 * 1024 * elapsed_since_log) if elapsed_since_log > 0 else 0
+            overall_speed = current / (1024 * 1024 * elapsed_since_start) if elapsed_since_start > 0 else 0
+            
+            speed_history.append(current_speed_mb_s)
+            if len(speed_history) > 20:
+                speed_history.pop(0)
+            
+            # System diagnostics DURING transfer
+            diag = get_system_diagnostics()
+            percent = (current / total) * 100
+            
+            # Detect speed issues
+            is_stall = current_speed_mb_s < 2 and last_speed > 10
+            is_burst = current_speed_mb_s > 20
+            
+            # Diagnose cause of slowdown
+            cpu_issue = diag.get('process_cpu', 0) > 80 or diag.get('system_cpu', 0) > 90
+            mem_issue = diag.get('process_mem_mb', 0) > 400
+            thread_issue = diag.get('threads', 0) > 100
+            
+            status = "🚀 BURST" if is_burst else "⚠️ STALL" if is_stall else "⚙️ NORMAL"
+            
+            # Log speed with diagnostics
+            LOGGER(__name__).info(
+                f"[SPEED-DIAG] {status} | {file_name} {percent:.1f}% | "
+                f"Speed: {current_speed_mb_s:.1f}MB/s (avg: {overall_speed:.1f}MB/s) | "
+                f"CPU: {diag.get('process_cpu', 0):.0f}% (sys: {diag.get('system_cpu', 0):.0f}%) | "
+                f"RAM: {diag.get('process_mem_mb', 0):.0f}MB | "
+                f"Threads: {diag.get('threads', 0)} | FDs: {diag.get('open_files', 0)}"
+            )
+            
+            # DETAILED STALL DIAGNOSIS
+            if is_stall and not stall_detected:
+                stall_detected = True
+                
+                # Analyze what's causing the stall
+                cause = "UNKNOWN"
+                if cpu_issue:
+                    cause = "HIGH CPU (CODE/RENDER bottleneck)"
+                elif mem_issue:
+                    cause = "HIGH RAM (Memory pressure)"
+                elif thread_issue:
+                    cause = "TOO MANY THREADS (Connection queue issue)"
+                else:
+                    cause = "LIKELY TELEGRAM API THROTTLING (Network stall)"
+                
+                LOGGER(__name__).warning(
+                    f"[STALL-CAUSE] {file_name} | "
+                    f"Speed: {last_speed:.1f}→{current_speed_mb_s:.1f}MB/s | "
+                    f"CAUSE: {cause} | "
+                    f"CPU:{diag.get('process_cpu', 0):.0f}% RAM:{diag.get('process_mem_mb', 0):.0f}MB "
+                    f"Threads:{diag.get('threads', 0)} FDs:{diag.get('open_files', 0)}"
                 )
+                
+            elif current_speed_mb_s > 10 and stall_detected:
+                stall_detected = False
+                cpu_now = diag.get('process_cpu', 0)
+                mem_now = diag.get('process_mem_mb', 0)
+                LOGGER(__name__).info(
+                    f"[STALL-RECOVERY] {file_name} | Speed recovered: {current_speed_mb_s:.1f}MB/s | "
+                    f"CPU:{cpu_now:.0f}% RAM:{mem_now:.0f}MB"
+                )
+            
+            last_logged_bytes = current
+            last_logged_time = current_time
+            last_speed = current_speed_mb_s
         
         if original_callback:
             return original_callback(current, total)
     
-    return ram_logging_wrapper
+    return speed_monitor
 
 IS_CONSTRAINED = False
 
@@ -127,13 +227,8 @@ async def download_media_fast(
         
         connection_count = get_connection_count_for_size(file_size)
         
-        LOGGER(__name__).info(
-            f"Starting download: {os.path.basename(file)} "
-            f"({file_size/1024/1024:.1f}MB, {connection_count} connections)"
-        )
-        
         file_name = os.path.basename(file)
-        ram_callback = create_ram_logging_callback(progress_callback, file_size, "DOWNLOAD", file_name)
+        speed_callback = create_speed_monitor_callback(progress_callback, file_size, file_name)
         
         if media_location and file_size > 0:
             with open(file, 'wb') as f:
@@ -141,17 +236,11 @@ async def download_media_fast(
                     client=client,
                     location=media_location,
                     out=f,
-                    progress_callback=ram_callback,
+                    progress_callback=speed_callback,
                     file_size=file_size,
                     connection_count=connection_count
                 )
-            end_ram = get_ram_usage_mb()
-            LOGGER(__name__).info(f"[RAM] DOWNLOAD COMPLETE: {file_name} - RAM before GC: {end_ram:.1f}MB")
-            
             gc.collect()
-            after_gc_ram = get_ram_usage_mb()
-            ram_released = end_ram - after_gc_ram
-            LOGGER(__name__).info(f"[RAM] DOWNLOAD GC: {file_name} - RAM after GC: {after_gc_ram:.1f}MB (released: {ram_released:.1f}MB)")
             return file
         else:
             LOGGER(__name__).warning(
@@ -186,23 +275,15 @@ async def upload_media_fast(
     
     try:
         file_name = os.path.basename(file_path)
-        LOGGER(__name__).info(
-            f"Starting upload: {file_name} "
-            f"({file_size/1024/1024:.1f}MB, {connection_count} connections)"
-        )
-        
-        ram_callback = create_ram_logging_callback(progress_callback, file_size, "UPLOAD", file_name)
+        speed_callback = create_speed_monitor_callback(progress_callback, file_size, file_name)
         
         file_handle = open(file_path, 'rb')
         result = await fast_upload(
             client=client,
             file=file_handle,
-            progress_callback=ram_callback,
+            progress_callback=speed_callback,
             connection_count=connection_count
         )
-        
-        end_ram = get_ram_usage_mb()
-        LOGGER(__name__).info(f"[RAM] UPLOAD COMPLETE: {file_name} - RAM before GC: {end_ram:.1f}MB")
         return result
         
     except Exception as e:
@@ -216,11 +297,7 @@ async def upload_media_fast(
             except:
                 pass
         
-        before_gc = get_ram_usage_mb()
         gc.collect()
-        after_gc = get_ram_usage_mb()
-        ram_released = before_gc - after_gc
-        LOGGER(__name__).info(f"[RAM] UPLOAD GC: {os.path.basename(file_path)} - RAM after GC: {after_gc:.1f}MB (released: {ram_released:.1f}MB)")
 
 
 def get_connection_count_for_size(file_size: int, max_count: int = CONNECTIONS_PER_TRANSFER) -> int:
