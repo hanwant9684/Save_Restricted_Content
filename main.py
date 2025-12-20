@@ -362,9 +362,8 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                 LOGGER(__name__).info(f"Fetching dialogs to populate entity cache for user {event.sender_id}")
                 status_msg = await event.respond("🔄 **Loading your channels... Please wait.**")
                 
-                # Get dialogs with reasonable limit (load first 100 to avoid slow API calls)
-                # This is much faster than limit=None which loads all dialogs (can be 30+ seconds)
-                dialogs = await client_to_use.get_dialogs(limit=100)
+                # Get all dialogs (chats/channels) - this populates Telethon's entity cache
+                dialogs = await client_to_use.get_dialogs(limit=None)
                 LOGGER(__name__).info(f"Loaded {len(dialogs)} dialogs for user {event.sender_id}")
                 
                 # Try to resolve entity again after loading dialogs
