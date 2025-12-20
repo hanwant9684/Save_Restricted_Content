@@ -269,8 +269,8 @@ class ParallelTransferrer:
     async def init_upload(self, file_id: int, file_size: int, part_size_kb: Optional[float] = None,
                           connection_count: Optional[int] = None) -> Tuple[int, int, bool]:
         connection_count = connection_count or self._get_connection_count(file_size)
-        # OPTIMIZED: Always use maximum part size (1024) for fastest uploads
-        part_size = (part_size_kb or 1024) * 1024  # 1024KB max chunk size
+        # OPTIMIZED: Always use maximum part size (512KB) for fastest uploads
+        part_size = (part_size_kb or 512) * 1024  # 512KB max chunk size
         part_count = (file_size + part_size - 1) // part_size
         is_large = file_size > 10 * 1024 * 1024
         await self._init_upload(connection_count, file_id, part_count, is_large)
@@ -287,9 +287,9 @@ class ParallelTransferrer:
                        part_size_kb: Optional[float] = None,
                        connection_count: Optional[int] = None) -> AsyncGenerator[bytes, None]:
         connection_count = connection_count or self._get_connection_count(file_size)
-        # OPTIMIZED: Always use maximum part size (1024KB) for fastest downloads
+        # OPTIMIZED: Always use maximum part size (512KB) for fastest downloads
         # Larger chunks = fewer requests = higher throughput
-        part_size = (part_size_kb or 1024) * 1024  # 1024KB max chunk size
+        part_size = (part_size_kb or 512) * 1024  # 512KB max chunk size
         part_count = math.ceil(file_size / part_size)
         log.debug("Starting parallel download: "
                   f"{connection_count} {part_size} {part_count} {file!s}")
