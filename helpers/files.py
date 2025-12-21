@@ -1,4 +1,4 @@
-# Copyright (C) @Wolfy004
+# Copyright (C) @TheSmartBisnu
 
 import os
 import gc

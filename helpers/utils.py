@@ -63,111 +63,10 @@ async def cmd_exec(cmd, shell=False):
     return stdout, stderr, proc.returncode
 
 
-async def has_video_stream(video_path):
-    """
-    Check if a file has a video stream using ffprobe.
-    Properly handles process cleanup to prevent resource leaks.
-    
-    Returns:
-        tuple: (has_video: bool, duration: float or None, error_msg: str or None)
-    """
-    proc = None
-    try:
-        cmd = [
-            "ffprobe", "-v", "error", "-select_streams", "v:0",
-            "-show_entries", "stream=codec_type,duration",
-            "-of", "csv=p=0", video_path
-        ]
-        proc = await create_subprocess_exec(*cmd, stdout=PIPE, stderr=PIPE)
-        
-        try:
-            stdout, stderr = await wait_for(proc.communicate(), timeout=10.0)
-        except asyncio.TimeoutError:
-            LOGGER(__name__).debug(f"ffprobe timeout checking {os.path.basename(video_path)}")
-            if proc:
-                try:
-                    proc.kill()
-                    await asyncio.wait_for(proc.wait(), timeout=2.0)
-                except:
-                    pass
-            return False, None, "ffprobe timed out"
-        
-        stdout_str = stdout.decode().strip() if stdout else ""
-        stderr_str = stderr.decode().strip() if stderr else ""
-        
-        if proc.returncode != 0 or not stdout_str:
-            if stderr_str:
-                LOGGER(__name__).debug(f"ffprobe error for {os.path.basename(video_path)}: {stderr_str[:100]}")
-            return False, None, stderr_str or "No video stream found"
-        
-        parts = stdout_str.split(',')
-        if parts and 'video' in str(parts[0]).lower():
-            duration = None
-            if len(parts) > 1 and parts[1] and parts[1] != 'N/A':
-                try:
-                    duration = float(parts[1])
-                except ValueError:
-                    pass
-            return True, duration, None
-        return False, None, "No video stream detected"
-    except Exception as e:
-        LOGGER(__name__).debug(f"has_video_stream exception: {e}")
-        if proc and proc.returncode is None:
-            try:
-                proc.kill()
-                await asyncio.wait_for(proc.wait(), timeout=2.0)
-            except:
-                pass
-        return False, None, str(e)
-
-
-async def create_placeholder_thumbnail(thumb_path, width=320, height=240):
-    """
-    Create a simple placeholder image as last resort fallback.
-    Uses solid color with video icon text - very fast and reliable.
-    """
-    proc = None
-    try:
-        cmd = [
-            "ffmpeg", "-y", "-f", "lavfi", "-i",
-            f"color=c=0x1a1a2e:s={width}x{height}:d=1",
-            "-frames:v", "1", thumb_path
-        ]
-        proc = await create_subprocess_exec(*cmd, stdout=PIPE, stderr=PIPE)
-        
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
-        except asyncio.TimeoutError:
-            if proc:
-                try:
-                    proc.kill()
-                    await asyncio.wait_for(proc.wait(), timeout=2.0)
-                except:
-                    pass
-            return None
-        
-        if proc.returncode == 0 and os.path.exists(thumb_path):
-            if os.path.getsize(thumb_path) > 0:
-                LOGGER(__name__).debug(f"Placeholder thumbnail created")
-                return thumb_path
-        return None
-    except Exception as e:
-        LOGGER(__name__).debug(f"Placeholder creation failed: {e}")
-        return None
-    finally:
-        if proc and proc.returncode is None:
-            try:
-                proc.kill()
-                await asyncio.wait_for(proc.wait(), timeout=2.0)
-            except:
-                pass
-
-
 async def generate_thumbnail(video_path, thumb_path=None, duration=None):
     """
     Generate a thumbnail from a video file using ffmpeg.
-    Multi-strategy approach with position-based extraction and smart fallback.
-    Covers virtually all video files with graceful degradation.
+    Extracts a frame from 1 second into the video (or middle if duration known).
     
     Args:
         video_path: Path to the video file
@@ -180,147 +79,48 @@ async def generate_thumbnail(video_path, thumb_path=None, duration=None):
     if thumb_path is None:
         thumb_path = video_path + ".thumb.jpg"
     
-    has_video, probe_duration, error_msg = await has_video_stream(video_path)
-    if not has_video:
-        LOGGER(__name__).info(f"Skipping thumbnail for {os.path.basename(video_path)}: {error_msg}")
-        return None
-    
-    if probe_duration and not duration:
-        duration = probe_duration
-    
-    file_size = 0
+    proc = None
     try:
-        file_size = os.path.getsize(video_path)
-    except Exception as e:
-        LOGGER(__name__).debug(f"Could not determine file size: {e}")
-    
-    base_timeout = 10.0
-    if file_size > 100 * 1024 * 1024:
-        base_timeout = 20.0
-    if file_size > 500 * 1024 * 1024:
-        base_timeout = 30.0
-    
-    seek_positions = [0]
-    if duration and duration > 1:
-        seek_positions = [
-            0,
-            int(duration * 0.25),
-            int(duration * 0.5),
-            int(duration * 0.75)
+        seek_time = 0
+        if duration and duration > 1:
+            seek_time = min(max(1, duration // 4), 5)
+        
+        cmd = [
+            "ffmpeg", "-y", "-i", video_path, "-ss", str(seek_time),
+            "-vframes", "1", "-vf", "scale=320:-1", "-q:v", "5", thumb_path
         ]
-    
-    strategies = []
-    
-    for pos_idx, seek_time in enumerate(seek_positions):
-        for strategy_type in ["standard", "thumbnail_filter", "first_frame"]:
-            if strategy_type == "standard":
-                strategies.append({
-                    "name": f"standard_pos{pos_idx}",
-                    "cmd": [
-                        "ffmpeg", "-y", "-ss", str(seek_time), "-i", video_path,
-                        "-vframes", "1", "-vf", "scale=320:-1", "-q:v", "5", thumb_path
-                    ],
-                    "timeout": base_timeout
-                })
-            elif strategy_type == "thumbnail_filter":
-                if pos_idx == 0:
-                    strategies.append({
-                        "name": "thumbnail_filter",
-                        "cmd": [
-                            "ffmpeg", "-y", "-i", video_path,
-                            "-vf", "thumbnail,scale=320:-1", "-frames:v", "1", "-q:v", "5", thumb_path
-                        ],
-                        "timeout": base_timeout * 1.5
-                    })
-            elif strategy_type == "first_frame":
-                if pos_idx == 0:
-                    strategies.append({
-                        "name": "first_frame",
-                        "cmd": [
-                            "ffmpeg", "-y", "-analyzeduration", "20M", "-probesize", "20M",
-                            "-i", video_path, "-ss", "0", "-vframes", "1",
-                            "-vf", "scale=320:-1", "-q:v", "5", thumb_path
-                        ],
-                        "timeout": base_timeout * 2
-                    })
-    
-    strategies.append({
-        "name": "no_filter",
-        "cmd": [
-            "ffmpeg", "-y", "-i", video_path,
-            "-vframes", "1", "-q:v", "5", thumb_path
-        ],
-        "timeout": base_timeout * 1.5
-    })
-    
-    for strategy in strategies:
-        proc = None
+        
+        proc = await create_subprocess_exec(*cmd, stdout=PIPE, stderr=PIPE)
+        
         try:
-            proc = await create_subprocess_exec(*strategy["cmd"], stdout=PIPE, stderr=PIPE)
-            
-            try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=strategy["timeout"])
-            except asyncio.TimeoutError:
-                LOGGER(__name__).debug(f"Thumbnail '{strategy['name']}' timed out ({strategy['timeout']}s)")
-                if proc:
-                    try:
-                        proc.kill()
-                        await asyncio.wait_for(proc.wait(), timeout=3.0)
-                    except Exception as kill_err:
-                        LOGGER(__name__).debug(f"Error killing process: {kill_err}")
-                continue
-            
-            if proc.returncode == 0:
-                try:
-                    if os.path.exists(thumb_path):
-                        thumb_size = os.path.getsize(thumb_path)
-                        if thumb_size > 0:
-                            LOGGER(__name__).debug(f"Thumbnail generated: {strategy['name']}")
-                            return thumb_path
-                        else:
-                            try:
-                                os.remove(thumb_path)
-                            except:
-                                pass
-                except OSError as e:
-                    LOGGER(__name__).debug(f"File check error: {e}")
+            stdout, stderr = await wait_for(proc.communicate(), timeout=10.0)
+        except asyncio.TimeoutError:
+            LOGGER(__name__).warning(f"Thumbnail generation timed out after 10s - skipping")
+            proc.kill()
+            await proc.wait()
+            return None
+        
+        if proc.returncode == 0 and os.path.exists(thumb_path):
+            thumb_size = os.path.getsize(thumb_path)
+            if thumb_size > 0:
+                return thumb_path
             else:
-                stderr_str = stderr.decode().strip() if stderr else ""
-                if stderr_str and len(stderr_str) > 0:
-                    LOGGER(__name__).debug(f"Strategy '{strategy['name']}' failed: {stderr_str[:50]}")
-                    
-        except Exception as e:
-            LOGGER(__name__).debug(f"Strategy '{strategy['name']}' error: {type(e).__name__}")
-            if proc:
                 try:
-                    if proc.returncode is None:
-                        proc.kill()
-                        await asyncio.wait_for(proc.wait(), timeout=2.0)
+                    os.remove(thumb_path)
                 except:
                     pass
-        finally:
-            if proc and proc.returncode is None:
-                try:
-                    proc.kill()
-                    await asyncio.wait_for(proc.wait(), timeout=2.0)
-                except Exception as cleanup_err:
-                    LOGGER(__name__).debug(f"Process cleanup error: {cleanup_err}")
-                finally:
-                    proc = None
-    
-    LOGGER(__name__).debug(f"All strategies failed, creating placeholder")
-    placeholder = await create_placeholder_thumbnail(thumb_path)
-    if placeholder:
-        LOGGER(__name__).debug(f"Using placeholder thumbnail for {os.path.basename(video_path)}")
-        return placeholder
-    
-    LOGGER(__name__).warning(f"Thumbnail generation completely failed: {os.path.basename(video_path)}")
-    try:
-        if os.path.exists(thumb_path):
-            os.remove(thumb_path)
-    except:
-        pass
-    return None
+                return None
+        else:
+            return None
+    except Exception as e:
+        LOGGER(__name__).warning(f"Thumbnail generation failed: {e}")
+        if proc and proc.returncode is None:
+            try:
+                proc.kill()
+                await proc.wait()
+            except:
+                pass
+        return None
 
 
 async def get_media_info(path):

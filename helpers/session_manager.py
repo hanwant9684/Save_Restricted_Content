@@ -230,14 +230,14 @@ class SessionManager:
             return
         
         self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
-        LOGGER(__name__).info(f"Started periodic session cleanup (every 2 minutes)")
+        LOGGER(__name__).info(f"Started periodic session cleanup (every 10 minutes)")
     
     async def _periodic_cleanup(self):
         """Background task that periodically cleans up idle sessions"""
         while True:
             try:
                 await self.cleanup_idle_sessions()
-                await asyncio.sleep(120)
+                await asyncio.sleep(600)
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -259,5 +259,5 @@ IS_CONSTRAINED = bool(
 )
 
 MAX_SESSIONS = 10 if IS_CONSTRAINED else 15
-IDLE_TIMEOUT_MINUTES = 2  # Reduced from 30 since smart timeout protects active downloads
+IDLE_TIMEOUT_MINUTES = 15  # Reduced from 30 since smart timeout protects active downloads
 session_manager = SessionManager(max_sessions=MAX_SESSIONS, idle_timeout_minutes=IDLE_TIMEOUT_MINUTES)
