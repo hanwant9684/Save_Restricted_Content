@@ -44,9 +44,6 @@ None specified yet. Add preferences as they are expressed.
     *   **Two-Step Verification:** Employs a landing page with a "Get Verification Code" button for ad verification.
 
 4.  **System Stability & Optimization:**
-    *   **Per-User Session Transfers (Dec 2025):** Since each user authenticates with their own Telegram session, no global connection pooling is needed. Each user's session can independently use full connection capacity without affecting others.
-        *   **Environment Variables:**
-            *   `CONNECTIONS_PER_TRANSFER` (default: 16) - Connections per download/upload
     *   **RAM Optimization:** Implemented comprehensive memory optimizations including tiered connection scaling, asynchronous background tasks (using `asyncio.create_task`), and optimized data structures for memory monitoring.
     *   **CRITICAL: Upload Connection Limiting (Nov 13, 2025):** Fixed critical memory leak that caused crashes on Render (512MB RAM) during 90MB file uploads:
         *   **Problem:** FastTelethon was spawning 18 parallel upload connections for 90MB files, causing >120MB RAM spike at upload start, exhausting available memory and crashing the bot.
@@ -62,12 +59,6 @@ None specified yet. Add preferences as they are expressed.
         *   This prevents RAM spikes and crashes on Render by allowing Telethon and file system to fully clear internal buffers and temporary data
     *   **Cloud-Only Backup:** Simplifies backup strategy to use only GitHub for database persistence, with automatic backups every 10 minutes.
     *   **Robust Error Handling:** Includes graceful shutdown mechanisms and proper background task tracking to prevent resource leaks and errors like "Task was destroyed but it is pending!".
-    *   **Memory Leak Fixes (Dec 13, 2025):** Fixed multiple memory and disk leaks:
-        *   **Telethon Client Leak on Failed Logins:** Added `client.disconnect()` in exception handlers for `FloodWaitError` and generic exceptions in `phone_auth.py`
-        *   **Phone Auth Cleanup Task:** Now started in `main.py` to clean up stale auth sessions (each holding ~60-70MB)
-        *   **Session Manager Cleanup Task:** Now started in `main.py` to disconnect idle sessions
-        *   **Periodic File Cleanup Task:** Now started in `main.py` to remove old download files
-        *   **Download Manager Sweep Task:** Added periodic sweep to clean orphaned tasks and expired cooldowns
     *   **Paid Media Detection (Dec 2025):** Added handling for Telegram's paid/premium media (`MessageMediaPaidMedia`):
         *   Detects paid media before download attempt
         *   Attempts to extract actual media from extended_media container if accessible
@@ -92,14 +83,6 @@ None specified yet. Add preferences as they are expressed.
 -   `session_manager.py`: Manages user session lifecycles.
 -   `cloud_backup.py`: Implements the GitHub-based database backup system.
 -   `legal_acceptance.py`: Manages the legal terms acceptance process.
--   `admin_commands.py`: Admin commands including broadcast and targeted messaging.
-
-### Admin Commands
--   `/broadcast <message>` - Send message to all users OR specific users
-    -   All users: `/broadcast Hello everyone!`
-    -   Single user: `/broadcast @123456789 Hello!`
-    -   Multiple users: `/broadcast @123456789,987654321 Important notice!`
-    -   Media: Reply to photo/video/document with `/broadcast [@user_ids] <optional caption>`
 
 ## External Dependencies
 

@@ -1,5 +1,3 @@
-# copied from https://github.com/tulir/mautrix-telegram/blob/master/mautrix_telegram/util/parallel_file_transfer.py
-# Copyright (C) 2021 Tulir Asokan
 import asyncio
 import hashlib
 import inspect
@@ -50,27 +48,10 @@ class DownloadSender:
     async def next(self) -> Optional[bytes]:
         if not self.remaining:
             return None
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                result = await self.client._call(self.sender, self.request)
-                self.remaining -= 1
-                self.request.offset += self.stride
-                return result.bytes
-            except Exception as e:
-                error_str = str(e).lower()
-                if 'flood' in error_str or '420' in str(type(e).__name__):
-                    import re
-                    wait_match = re.search(r'(\d+)', str(e))
-                    wait_time = int(wait_match.group(1)) if wait_match else 5
-                    wait_time = min(wait_time, 30)
-                    log.warning(f"FLOOD_WAIT detected, waiting {wait_time}s (attempt {attempt+1}/{max_retries})")
-                    await asyncio.sleep(wait_time)
-                    if attempt == max_retries - 1:
-                        raise
-                else:
-                    raise
-        return None
+        result = await self.client._call(self.sender, self.request)
+        self.remaining -= 1
+        self.request.offset += self.stride
+        return result.bytes
 
     def disconnect(self) -> Awaitable[None]:
         return self.sender.disconnect()
@@ -146,11 +127,9 @@ class ParallelTransferrer:
     @staticmethod
     def _get_connection_count(file_size: int, max_count: int = 20,
                               full_size: int = 100 * 1024 * 1024) -> int:
-        # Each user has their own session, so each transfer can use full connection capacity
-        # This method is monkeypatched by helpers/transfer.py with size-aware logic
-        if file_size <= 0:
-            return max(6, max_count // 2)  # Safe fallback for unknown size
-        return max_count
+        if file_size > full_size:
+            return max_count
+        return math.ceil((file_size / full_size) * max_count)
 
     async def _init_download(self, connections: int, file: TypeLocation, part_count: int,
                              part_size: int) -> None:
@@ -269,8 +248,7 @@ class ParallelTransferrer:
     async def init_upload(self, file_id: int, file_size: int, part_size_kb: Optional[float] = None,
                           connection_count: Optional[int] = None) -> Tuple[int, int, bool]:
         connection_count = connection_count or self._get_connection_count(file_size)
-        # OPTIMIZED: Always use maximum part size (512KB) for fastest uploads
-        part_size = (part_size_kb or 512) * 1024  # 512KB max chunk size
+        part_size = (part_size_kb or utils.get_appropriated_part_size(file_size)) * 1024
         part_count = (file_size + part_size - 1) // part_size
         is_large = file_size > 10 * 1024 * 1024
         await self._init_upload(connection_count, file_id, part_count, is_large)
@@ -287,9 +265,7 @@ class ParallelTransferrer:
                        part_size_kb: Optional[float] = None,
                        connection_count: Optional[int] = None) -> AsyncGenerator[bytes, None]:
         connection_count = connection_count or self._get_connection_count(file_size)
-        # OPTIMIZED: Always use maximum part size (512KB) for fastest downloads
-        # Larger chunks = fewer requests = higher throughput
-        part_size = (part_size_kb or 512) * 1024  # 512KB max chunk size
+        part_size = (part_size_kb or utils.get_appropriated_part_size(file_size)) * 1024
         part_count = math.ceil(file_size / part_size)
         log.debug("Starting parallel download: "
                   f"{connection_count} {part_size} {part_count} {file!s}")
@@ -326,8 +302,7 @@ def stream_file(file_to_stream: BinaryIO, chunk_size=1024):
 
 async def _internal_transfer_to_telegram(client: TelegramClient,
                                          response: BinaryIO,
-                                         progress_callback: callable,
-                                         connection_count: Optional[int] = None
+                                         progress_callback: callable
                                          ) -> Tuple[TypeInputFile, int]:
     file_id = helpers.generate_random_long()
     file_size = os.path.getsize(response.name)
@@ -337,7 +312,7 @@ async def _internal_transfer_to_telegram(client: TelegramClient,
 
     hash_md5 = hashlib.md5()
     uploader = ParallelTransferrer(client)
-    part_size, part_count, is_large = await uploader.init_upload(file_id, file_size, connection_count=connection_count)
+    part_size, part_count, is_large = await uploader.init_upload(file_id, file_size)
     buffer = bytearray()
     try:
         for data in stream_file(response):
@@ -373,14 +348,13 @@ async def download_file(client: TelegramClient,
                         location: TypeLocation,
                         out: BinaryIO,
                         progress_callback: callable = None,
-                        file_size: Optional[int] = None,
-                        connection_count: Optional[int] = None
+                        file_size: Optional[int] = None
                         ) -> BinaryIO:
     size = file_size if file_size is not None else location.size
     dc_id, location = utils.get_input_location(location)
     # We lock the transfers because telegram has connection count limits
     downloader = ParallelTransferrer(client, dc_id)
-    downloaded = downloader.download(location, size, connection_count=connection_count)
+    downloaded = downloader.download(location, size)
     async for x in downloaded:
         out.write(x)
         if progress_callback:
@@ -394,7 +368,7 @@ async def download_file(client: TelegramClient,
 async def upload_file(client: TelegramClient,
                       file: BinaryIO,
                       progress_callback: callable = None,
-                      connection_count: Optional[int] = None
+
                       ) -> TypeInputFile:
-    res = (await _internal_transfer_to_telegram(client, file, progress_callback, connection_count))[0]
+    res = (await _internal_transfer_to_telegram(client, file, progress_callback))[0]
     return res

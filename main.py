@@ -206,9 +206,9 @@ async def start(event):
         "   ♻️ Repeat anytime!\n"
         "   👉 Use: `/getpremium`\n\n"
         "💰 **Option 2: Paid ($2/month)**\n"
-        "   ⭐ 7/15/30 days unlimited access\n"
+        "   ⭐ 7/15/30 Days unlimited access\n"
         "   🚀 Priority downloads\n"
-        "   📦 Batch download support upto**(200)**\n"
+        "   📦 Batch download support\n"
         "   👉 Use: `/upgrade`\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "ℹ️ **Need help?** Use `/help` for all commands\n\n"
@@ -244,8 +244,8 @@ async def help_command(event):
             "   📺 Videos • 🖼️ Photos • 🎵 Audio • 📄 Documents\n\n"
             "**Batch Download:**\n"
             "   `/bdl <start_link> <end_link>`\n"
-            "   💡 Example: `/bdl https://t.me/channel/100 https://t.me/channel/300`\n"
-            "   📦 Downloads all posts from 100 to 300 (max 200)\n\n"
+            "   💡 Example: `/bdl https://t.me/channel/100 https://t.me/channel/200`\n"
+            "   📦 Downloads all posts from 100 to 200 (max 200)\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "📊 **Download Status:**\n\n"
             "   `/status` - Check your download status\n"
@@ -286,9 +286,9 @@ async def help_command(event):
             "   ♻️ Repeat anytime!\n\n"
             "💰 **Paid Premium ($2/month):**\n"
             "   `/upgrade` - View payment options\n"
-            "   ⭐ 7/15/30 days unlimited access\n"
+            "   ⭐ 7/15/30 Days unlimited access\n"
             "   🚀 Priority downloads\n"
-            "   📦 Batch download support upto**(200)**\n\n"
+            "   📦 Batch download support\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "📊 **Download Status:**\n\n"
             "   `/status` - Check your download status\n"
@@ -671,7 +671,7 @@ async def download_range(event):
             "🚀 **Batch Download Process**\n"
             "`/bdl start_link end_link`\n\n"
             "💡 **Example:**\n"
-            "`/bdl https://t.me/mychannel/100 https://t.me/mychannel/300`"
+            "`/bdl https://t.me/mychannel/100 https://t.me/mychannel/200`"
         )
         return
 
@@ -1536,7 +1536,7 @@ async def callback_handler(event):
         payment_methods_available = PyroConf.PAYPAL_URL or PyroConf.UPI_ID or PyroConf.TELEGRAM_TON or PyroConf.CRYPTO_ADDRESS
         
         if payment_methods_available:
-            upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n\n"
+            upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n"
             
             if PyroConf.PAYPAL_URL:
                 upgrade_text += f"   💳 **PayPal:** {PyroConf.PAYPAL_URL}\n\n"
@@ -1722,39 +1722,11 @@ if __name__ == "__main__":
     async def main():
         from queue_manager import download_manager
         from helpers.session_manager import session_manager
-        from helpers.cleanup import start_periodic_cleanup
         
         try:
             await bot.start(bot_token=PyroConf.BOT_TOKEN)
             await download_manager.start_processor()
             LOGGER(__name__).info("Download queue processor initialized")
-            
-            # Start cleanup tasks to prevent memory and disk leaks
-            phone_auth_handler.start_cleanup_task()
-            LOGGER(__name__).info("Phone auth cleanup task started")
-            
-            await session_manager.start_cleanup_task()
-            LOGGER(__name__).info("Session manager cleanup task started")
-            
-            asyncio.create_task(start_periodic_cleanup(interval_minutes=30))
-            LOGGER(__name__).info("Periodic file cleanup task started")
-            
-            async def periodic_sweep():
-                """Periodically sweep stale items from download manager"""
-                while True:
-                    try:
-                        await asyncio.sleep(1800)  # Every 30 minutes
-                        result = await download_manager.sweep_stale_items(max_age_minutes=60)
-                        if result['orphaned_tasks'] > 0 or result['expired_cooldowns'] > 0:
-                            LOGGER(__name__).info(f"Sweep completed: {result}")
-                    except asyncio.CancelledError:
-                        break
-                    except Exception as e:
-                        LOGGER(__name__).error(f"Error in periodic sweep: {e}")
-            
-            asyncio.create_task(periodic_sweep())
-            LOGGER(__name__).info("Download manager sweep task started")
-            
             LOGGER(__name__).info("Bot Started!")
             await bot.run_until_disconnected()
         except KeyboardInterrupt:

@@ -83,14 +83,6 @@ class PyroConf:
     except ValueError:
         FREE_INTRA_DELAY = 15
     
-    # Connection Configuration for Transfers
-    # Since each user has their own session, no global pooling is needed
-    # Each transfer can use up to this many connections (default: 16)
-    try:
-        CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
-    except ValueError:
-        CONNECTIONS_PER_TRANSFER = 16
-    
     @staticmethod
     def get_app_url() -> str:
         """
