@@ -1,45 +1,71 @@
 """
-HYBRID TRANSFER APPROACH for RAM Optimization on Render
-========================================================
+HIGH-SPEED TRANSFER MODULE for Per-User Sessions
+=================================================
 
-DOWNLOADS: Streaming (Telethon native)
-- Uses client.iter_download() for single-connection streaming
-- Minimal RAM usage - no parallel connections
-- Downloads chunks one at a time, writing directly to disk
-- Prevents RAM spikes and crashes on constrained environments
+This module implements fast file transfers using FastTelethon.
+Since each user has their own Telegram session, no global connection
+pooling is needed - each session can use full connection capacity.
 
-UPLOADS: FastTelethon (Parallel)
-- Uses FastTelethon for parallel upload connections
-- Optimized connection count based on file size (3-6 connections)
-- Still RAM-efficient as it streams file chunks
-- Faster upload speeds while preventing crashes
-
-This hybrid approach provides the best balance:
-✓ Downloads won't cause RAM spikes (streaming)
-✓ Uploads remain fast (parallel) but RAM-controlled
-✓ Prevents Render crashes while maintaining performance
+CONFIGURATION (Environment Variables):
+- CONNECTIONS_PER_TRANSFER: Connections per download/upload (default: 16)
 """
 import os
 import asyncio
 import math
 import inspect
-from typing import Optional, Callable, BinaryIO
+import psutil
+import gc
+from typing import Optional, Callable, BinaryIO, Set, Dict
 from telethon import TelegramClient, utils
 from telethon.tl.types import Message, Document, TypeMessageMedia, InputPhotoFileLocation, InputDocumentFileLocation, MessageMediaPaidMedia
 from logger import LOGGER
 from FastTelethon import download_file as fast_download, upload_file as fast_upload, ParallelTransferrer
 
-IS_CONSTRAINED = bool(
-    os.getenv('RENDER') or 
-    os.getenv('RENDER_EXTERNAL_URL') or 
-    os.getenv('REPLIT_DEPLOYMENT') or 
-    os.getenv('REPL_ID')
-)
+CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
 
-# Tiered connection scaling for RAM optimization (uploads only - downloads use streaming)
-# Each connection uses ~5-10MB RAM
-# StringSession uses minimal RAM so we can use 16 connections for all sizes
-MAX_UPLOAD_CONNECTIONS = 16 if IS_CONSTRAINED else 16
+def get_ram_usage_mb():
+    """Get current RAM usage in MB"""
+    process = psutil.Process(os.getpid())
+    return process.memory_info().rss / 1024 / 1024
+
+def create_ram_logging_callback(original_callback: Optional[Callable], file_size: int, operation: str, file_name: str):
+    """
+    Wrap progress callback to log RAM usage at 25%, 50%, 75% progress.
+    """
+    logged_thresholds: Set[int] = set()
+    start_ram = get_ram_usage_mb()
+    LOGGER(__name__).info(f"[RAM] {operation} START: {file_name} - RAM: {start_ram:.1f}MB")
+    
+    def ram_logging_wrapper(current: int, total: int):
+        nonlocal logged_thresholds
+        
+        if total <= 0:
+            if original_callback:
+                return original_callback(current, total)
+            return
+        
+        percent = (current / total) * 100
+        
+        for threshold in [25, 50, 75, 100]:
+            if percent >= threshold and threshold not in logged_thresholds:
+                logged_thresholds.add(threshold)
+                current_ram = get_ram_usage_mb()
+                ram_increase = current_ram - start_ram
+                LOGGER(__name__).info(
+                    f"[RAM] {operation} {threshold}%: {file_name} - "
+                    f"RAM: {current_ram:.1f}MB (+{ram_increase:.1f}MB from start)"
+                )
+        
+        if original_callback:
+            return original_callback(current, total)
+    
+    return ram_logging_wrapper
+
+IS_CONSTRAINED = False
+
+MAX_CONNECTIONS = CONNECTIONS_PER_TRANSFER
+MAX_UPLOAD_CONNECTIONS = CONNECTIONS_PER_TRANSFER
+MAX_DOWNLOAD_CONNECTIONS = CONNECTIONS_PER_TRANSFER
 
 async def download_media_fast(
     client: TelegramClient,
@@ -48,78 +74,97 @@ async def download_media_fast(
     progress_callback: Optional[Callable] = None
 ) -> str:
     """
-    Download media using STREAMING approach for minimal RAM usage.
-    This prevents RAM spikes and crashes on constrained environments like Render.
+    Download media using FastTelethon with full connection capacity.
     
-    Uses Telethon's native iter_download() which streams chunks without parallel connections.
-    This is much more RAM-efficient than FastTelethon's parallel approach.
+    Since each user has their own Telegram session, each download can
+    use the full connection capacity without needing global pooling.
     """
     if not message.media:
         raise ValueError("Message has no media")
     
-    # Check for paid media - not supported by Telethon's streaming
     if isinstance(message.media, MessageMediaPaidMedia):
         LOGGER(__name__).warning(f"Paid media detected - attempting extended media extraction")
-        # Try to extract the actual media from paid media container
         if hasattr(message.media, 'extended_media') and message.media.extended_media:
             extended = message.media.extended_media
-            # Handle list of extended media
             if isinstance(extended, list) and len(extended) > 0:
                 first_media = extended[0]
                 if hasattr(first_media, 'media') and first_media.media:
                     LOGGER(__name__).info(f"Extracted media from paid media container")
-                    # Use the extracted media for download
                     return await client.download_media(first_media.media, file=file, progress_callback=progress_callback)
-            # Handle single extended media
             elif hasattr(extended, 'media') and extended.media:
                 LOGGER(__name__).info(f"Extracted single media from paid media container")
                 return await client.download_media(extended.media, file=file, progress_callback=progress_callback)
-        
-        # If we can't extract, raise a clear error
         raise ValueError("Paid media (premium content) cannot be downloaded - the content owner requires payment to access this media")
     
     try:
-        # Get file size for progress tracking
         file_size = 0
+        media_location = None
+        
         if message.document:
             file_size = message.document.size
+            media_location = message.document
         elif message.video:
             file_size = getattr(message.video, 'size', 0)
+            media_location = message.video
         elif message.audio:
             file_size = getattr(message.audio, 'size', 0)
+            media_location = message.audio
         elif message.photo:
             photo_sizes = [size for size in message.photo.sizes if hasattr(size, 'size')]
             if photo_sizes:
                 largest_size = max(photo_sizes, key=lambda s: s.size)
                 file_size = largest_size.size
+                media_location = message.photo
+        elif message.voice:
+            file_size = getattr(message.voice, 'size', 0)
+            media_location = message.voice
+        elif message.video_note:
+            file_size = getattr(message.video_note, 'size', 0)
+            media_location = message.video_note
+        elif message.sticker:
+            file_size = getattr(message.sticker, 'size', 0)
+            media_location = message.sticker
         
-        LOGGER(__name__).debug(f"Streaming download: {file} ({file_size} bytes)")
+        connection_count = get_connection_count_for_size(file_size)
         
-        # Use Telethon's native streaming download - minimal RAM usage
-        # iter_download streams chunks without loading entire file into memory
-        downloaded_bytes = 0
-        with open(file, 'wb') as f:
-            async for chunk in client.iter_download(message.media):
-                f.write(chunk)
-                downloaded_bytes += len(chunk)
-                
-                # Call progress callback if provided
-                # Handle both sync callbacks and async callbacks (lambdas that return coroutines)
-                if progress_callback and file_size > 0:
-                    result = progress_callback(downloaded_bytes, file_size)
-                    # If callback returns a coroutine, await it
-                    if inspect.iscoroutine(result):
-                        await result
+        LOGGER(__name__).info(
+            f"Starting download: {os.path.basename(file)} "
+            f"({file_size/1024/1024:.1f}MB, {connection_count} connections)"
+        )
         
-        LOGGER(__name__).debug(f"Streaming download complete: {file}")
-        return file
+        file_name = os.path.basename(file)
+        ram_callback = create_ram_logging_callback(progress_callback, file_size, "DOWNLOAD", file_name)
+        
+        if media_location and file_size > 0:
+            with open(file, 'wb') as f:
+                await fast_download(
+                    client=client,
+                    location=media_location,
+                    out=f,
+                    progress_callback=ram_callback,
+                    file_size=file_size,
+                    connection_count=connection_count
+                )
+            end_ram = get_ram_usage_mb()
+            LOGGER(__name__).info(f"[RAM] DOWNLOAD COMPLETE: {file_name} - RAM before GC: {end_ram:.1f}MB")
+            
+            gc.collect()
+            after_gc_ram = get_ram_usage_mb()
+            ram_released = end_ram - after_gc_ram
+            LOGGER(__name__).info(f"[RAM] DOWNLOAD GC: {file_name} - RAM after GC: {after_gc_ram:.1f}MB (released: {ram_released:.1f}MB)")
+            return file
+        else:
+            LOGGER(__name__).warning(
+                f"FastTelethon bypassed for {file_name}: media_location={media_location is not None}, "
+                f"file_size={file_size} - falling back to standard download"
+            )
+            return await client.download_media(message, file=file, progress_callback=progress_callback)
         
     except Exception as e:
-        # Check if it's a paid media error that slipped through
         error_str = str(e).lower()
         if 'paidmedia' in error_str or 'paid' in error_str:
             raise ValueError("Paid media (premium content) cannot be downloaded - the content owner requires payment to access this media")
-        LOGGER(__name__).error(f"Streaming download failed, falling back to standard: {e}")
+        LOGGER(__name__).error(f"FastTelethon download failed, falling back to standard: {e}")
         return await client.download_media(message, file=file, progress_callback=progress_callback)
 
 async def upload_media_fast(
@@ -128,36 +173,36 @@ async def upload_media_fast(
     progress_callback: Optional[Callable] = None
 ):
     """
-    Upload media using FASTTTELETHON for optimized parallel uploads.
-    This uses parallel connections for faster uploads while managing RAM efficiently.
+    Upload media using FastTelethon with full connection capacity.
     
-    FastTelethon uploads stream data in chunks, preventing full file loading into RAM.
-    Connection count is automatically optimized based on file size.
-    
-    CRITICAL: Uses try/finally to ensure cleanup runs even on failures,
-    preventing memory leaks from orphaned file handles and buffers.
+    Since each user has their own Telegram session, each upload can
+    use the full connection capacity without needing global pooling.
     """
-    import gc
-    
     file_size = os.path.getsize(file_path)
-    
-    # Calculate connection count to verify the monkeypatch is working
-    connection_count = _optimized_connection_count_upload(file_size)
+    connection_count = get_connection_count_for_size(file_size)
     
     file_handle = None
     result = None
     
     try:
-        LOGGER(__name__).debug(f"Upload starting: {file_path} ({file_size/1024/1024:.1f}MB)")
+        file_name = os.path.basename(file_path)
+        LOGGER(__name__).info(
+            f"Starting upload: {file_name} "
+            f"({file_size/1024/1024:.1f}MB, {connection_count} connections)"
+        )
+        
+        ram_callback = create_ram_logging_callback(progress_callback, file_size, "UPLOAD", file_name)
         
         file_handle = open(file_path, 'rb')
         result = await fast_upload(
             client=client,
             file=file_handle,
-            progress_callback=progress_callback
+            progress_callback=ram_callback,
+            connection_count=connection_count
         )
         
-        LOGGER(__name__).debug(f"Upload complete: {file_path}")
+        end_ram = get_ram_usage_mb()
+        LOGGER(__name__).info(f"[RAM] UPLOAD COMPLETE: {file_name} - RAM before GC: {end_ram:.1f}MB")
         return result
         
     except Exception as e:
@@ -165,53 +210,45 @@ async def upload_media_fast(
         return None
         
     finally:
-        # CRITICAL: Always close file handle to prevent memory leaks
         if file_handle:
             try:
                 file_handle.close()
             except:
                 pass
         
-        # Force garbage collection after upload to release buffers
+        before_gc = get_ram_usage_mb()
         gc.collect()
-        LOGGER(__name__).debug(f"Upload cleanup complete for: {file_path}")
+        after_gc = get_ram_usage_mb()
+        ram_released = before_gc - after_gc
+        LOGGER(__name__).info(f"[RAM] UPLOAD GC: {os.path.basename(file_path)} - RAM after GC: {after_gc:.1f}MB (released: {ram_released:.1f}MB)")
+
+
+def get_connection_count_for_size(file_size: int, max_count: int = CONNECTIONS_PER_TRANSFER) -> int:
+    """
+    Determine optimal connection count based on file size.
+    
+    Larger files benefit from more connections, while smaller files
+    don't need as many.
+    """
+    if file_size >= 10 * 1024 * 1024:
+        return max_count
+    elif file_size >= 1 * 1024 * 1024:
+        return min(12, max_count)
+    elif file_size >= 100 * 1024:
+        return min(8, max_count)
+    elif file_size >= 10 * 1024:
+        return min(6, max_count)
+    else:
+        return min(4, max_count)
+
 
 def _optimized_connection_count_upload(file_size, max_count=MAX_UPLOAD_CONNECTIONS, full_size=100*1024*1024):
-    """
-    CRITICAL RAM FIX: Tiered connection scaling for constrained environments (Render 512MB RAM, Replit)
-    
-    Without this fix, a 90MB file spawns 18 connections (>120MB RAM spike), crashing the bot.
-    With this fix, same file uses 2-3 connections (~20-30MB RAM spike), staying within limits.
-    
-    Connection tiers (each connection uses ~10MB RAM):
-    With 10 concurrent uploads possible, we must be very conservative.
-    
-    CONSTRAINED (Replit/Render - 512MB RAM):
-    - Files >= 1GB: 16 connections - StringSession uses minimal RAM
-    - Files 50MB-1GB: 16 connections - StringSession uses minimal RAM
-    - Files < 50MB: 16 connections - StringSession uses minimal RAM
-    
-    NON-CONSTRAINED (standard servers):
-    - Files >= 1GB: 16 connections
-    - Files 50MB-1GB: 16 connections
-    - Files < 50MB: 16 connections
-    
-    IMPORTANT: Uses MAX_UPLOAD_CONNECTIONS as ceiling to stay within memory limits.
-    """
-    if IS_CONSTRAINED:
-        if file_size >= 1024 * 1024 * 1024:  # 1GB+
-            return min(16, MAX_UPLOAD_CONNECTIONS)
-        elif file_size >= 50 * 1024 * 1024:  # 50MB-1GB
-            return min(16, MAX_UPLOAD_CONNECTIONS)
-        else:  # < 50MB
-            return min(16, MAX_UPLOAD_CONNECTIONS)
-    else:
-        if file_size >= 1024 * 1024 * 1024:  # 1GB+
-            return min(16, MAX_UPLOAD_CONNECTIONS)
-        elif file_size >= 50 * 1024 * 1024:  # 50MB-1GB
-            return min(16, MAX_UPLOAD_CONNECTIONS)
-        else:  # < 50MB
-            return min(16, MAX_UPLOAD_CONNECTIONS)
+    """Connection count function for uploads."""
+    return get_connection_count_for_size(file_size, max_count)
 
-# Apply optimized upload connection count to FastTelethon
+def _optimized_connection_count_download(file_size, max_count=MAX_DOWNLOAD_CONNECTIONS, full_size=100*1024*1024):
+    """Connection count function for downloads."""
+    return get_connection_count_for_size(file_size, max_count)
+
+
 ParallelTransferrer._get_connection_count = staticmethod(_optimized_connection_count_upload)
