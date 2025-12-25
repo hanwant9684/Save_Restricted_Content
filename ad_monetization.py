@@ -155,7 +155,7 @@ class RichAdsMonetization:
             
             async with aiohttp.ClientSession() as session:
                 payload = {
-                    "language_code": lang_code,
+                    "lang_code": lang_code,
                     "publisher_id": RICHADS_PUBLISHER,
                     "widget_id": RICHADS_WIDGET,
                     "bid_floor": 0.0001,
