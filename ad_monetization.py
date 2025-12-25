@@ -1,5 +1,6 @@
 import secrets
 import aiohttp
+import asyncio
 from datetime import datetime, timedelta
 import time
 
@@ -150,15 +151,20 @@ class RichAdsMonetization:
                 if current_time - self.user_last_ad[user_id] < RICHADS_AD_COOLDOWN:
                     return
             
-            # Add Content-Type header as per best practices
-            headers = {"Content-Type": "application/json"}
+            # Add Content-Type and Accept headers
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
             
             async with aiohttp.ClientSession() as session:
                 payload = {
+                    "lang": lang_code,
+                    "language_code": lang_code,
                     "lang_code": lang_code,
                     "publisher_id": RICHADS_PUBLISHER,
                     "widget_id": RICHADS_WIDGET,
-                    "bid_floor": 0.0001,
+                    "bid_floor": 0.0,
                     "telegram_id": str(user_id),
                     "production": True
                 }
@@ -169,7 +175,22 @@ class RichAdsMonetization:
                         LOGGER(__name__).warning(f"RichAds API returned status {resp.status}")
                         return
                     
-                    data = await resp.json()
+                    try:
+                        data = await resp.json()
+                    except (aiohttp.ContentTypeError, ValueError, TypeError):
+                        # Fallback if API returns HTML or empty string (common for errors or auth issues)
+                        text = await resp.text()
+                        if text.strip() == "[]":
+                            # This is technically JSON but might have been served with wrong mimetype
+                            import json
+                            try:
+                                data = json.loads(text)
+                            except:
+                                LOGGER(__name__).info(f"RichAds returned no ads (empty list) for user {user_id}")
+                                return
+                        else:
+                            LOGGER(__name__).warning(f"RichAds API returned non-JSON response: {text[:200]}")
+                            return
                     if not isinstance(data, list) or len(data) == 0:
                         LOGGER(__name__).info(f"RichAds returned no ads for user {user_id} with lang={lang_code}")
                         return
@@ -233,8 +254,10 @@ class RichAdsMonetization:
                     # This confirms impression to RichAds
                     if notification_url:
                         try:
-                            async with session.get(notification_url, timeout=aiohttp.ClientTimeout(total=3)) as notif_resp:
-                                if notif_resp.status == 200:
+                            # Use same headers for notification
+                            notif_headers = {"Accept": "*/*"}
+                            async with session.get(notification_url, headers=notif_headers, timeout=aiohttp.ClientTimeout(total=5)) as notif_resp:
+                                if notif_resp.status in (200, 204):
                                     LOGGER(__name__).debug(f"Impression confirmed for user {user_id}")
                                 else:
                                     LOGGER(__name__).warning(f"Impression notification returned {notif_resp.status}")
@@ -246,7 +269,7 @@ class RichAdsMonetization:
                     self.impression_count += 1
                     LOGGER(__name__).info(f"RichAds shown to user {user_id} | Total impressions: {self.impression_count}")
                     
-        except aiohttp.ClientTimeout:
+        except asyncio.TimeoutError:
             LOGGER(__name__).warning(f"RichAds API timeout for user {user_id}")
         except Exception as e:
             LOGGER(__name__).error(f"Error showing RichAds: {e}")
