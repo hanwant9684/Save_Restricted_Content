@@ -6,3 +6,10 @@ waitress
 orjson
 ffmpeg
 aiohttp
+aiohttp
+cryptg
+orjson
+psutil
+Telethon
+uvloop
+waitress

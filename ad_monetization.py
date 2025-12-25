@@ -171,7 +171,7 @@ class RichAdsMonetization:
                     
                     data = await resp.json()
                     if not isinstance(data, list) or len(data) == 0:
-                        LOGGER(__name__).debug(f"RichAds returned empty response for user {user_id}")
+                        LOGGER(__name__).info(f"RichAds returned no ads for user {user_id} with lang={lang_code}")
                         return
                     
                     ad = data[0]

@@ -228,7 +228,8 @@ async def start(event):
     await send_video_message(event, 41, welcome_text, markup, "start command")
     
     # Show RichAds to free users
-    lang_code = getattr(await event.get_sender(), 'language_code', None) or "en"
+    sender = await event.get_sender()
+    lang_code = getattr(sender, 'lang_code', None) or "en"
     await richads.show_ad(bot, event.chat_id, event.sender_id, lang_code)
 
 @bot.on(events.NewMessage(pattern='/help', incoming=True, func=lambda e: e.is_private))
