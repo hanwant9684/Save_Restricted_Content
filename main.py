@@ -50,7 +50,7 @@ from config import PyroConf
 from logger import LOGGER
 from database_sqlite import db
 from phone_auth import PhoneAuthHandler
-from ad_monetization import ad_monetization, richads, PREMIUM_DOWNLOADS
+from ad_monetization import ad_monetization, PREMIUM_DOWNLOADS
 from access_control import admin_only, paid_or_admin_only, check_download_limit, register_user, check_user_session, get_user_client, force_subscribe
 from memory_monitor import memory_monitor
 from admin_commands import (
@@ -67,6 +67,7 @@ from admin_commands import (
 )
 from queue_manager import download_manager
 from legal_acceptance import show_legal_acceptance, handle_legal_callback
+from richads import richads
 
 # Initialize the bot client with Telethon
 # Telethon handles connection pooling and performance optimization automatically
@@ -227,10 +228,11 @@ async def start(event):
     
     await send_video_message(event, 41, welcome_text, markup, "start command")
     
-    # Show RichAds to free users
-    sender = await event.get_sender()
-    lang_code = getattr(sender, 'lang_code', None) or "en"
-    await richads.show_ad(bot, event.chat_id, event.sender_id, lang_code)
+    # Show RichAd after welcome message
+    if richads.is_enabled():
+        sender = await event.get_sender()
+        lang_code = getattr(sender, 'lang_code', 'en') or 'en'
+        await richads.send_ad_to_user(bot, event.chat_id, lang_code)
 
 @bot.on(events.NewMessage(pattern='/help', incoming=True, func=lambda e: e.is_private))
 @register_user
@@ -332,6 +334,16 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
 
     try:
         LOGGER(__name__).debug(f"Attempting to parse URL: {post_url}")
+        
+        # Show RichAd before download starts
+        if richads.is_enabled():
+            try:
+                sender = await event.get_sender()
+                lang_code = getattr(sender, 'lang_code', 'en') or 'en'
+                await richads.send_ad_to_user(bot, event.chat_id, lang_code)
+            except Exception as e:
+                LOGGER(__name__).debug(f"RichAd before download failed: {e}")
+        
         chat_id, message_id = getChatMsgID(post_url)
         
         # Convert chat_id to int if it's a numeric string (Telethon requirement)
@@ -619,15 +631,6 @@ async def download_media(event):
         return
 
     post_url = command[1]
-    
-    # Show ads to free users before download
-    # Show RichAds to free users
-    try:
-        sender = await event.get_sender()
-        lang_code = getattr(sender, 'lang_code', None) or "en"
-        await richads.show_ad(bot, event.chat_id, event.sender_id, lang_code)
-    except Exception as e:
-        LOGGER(__name__).warning(f"Could not show ad on download: {e}")
 
     # Check if user has personal session
     user_client, error_code = await get_user_client(event.sender_id)
@@ -1093,27 +1096,19 @@ async def server_status_command(event):
 @check_download_limit
 async def handle_any_message(event):
     if event.text and not event.text.startswith("/"):
-        # Show ads to free users before download
-        try:
-            sender = await event.get_sender()
-            lang_code = getattr(sender, 'lang_code', None) or "en"
-            await richads.show_ad(bot, event.chat_id, event.sender_id, lang_code)
-        except Exception as e:
-            LOGGER(__name__).warning(f"Could not show ad on message: {e}")
+        # Check if user is premium for cooldown settings
+        is_premium = db.get_user_type(event.sender_id) in ['paid', 'admin']
         
-    # Check if user is premium for cooldown settings
-    is_premium = db.get_user_type(event.sender_id) in ['paid', 'admin']
-    
-    # Check if user already has an active download (quick check before getting client)
-    async with download_manager._lock:
-        if event.sender_id in download_manager.active_downloads:
-            await event.respond(
-                "❌ **You already have a download in progress!**\n\n"
-                "⏳ Please wait for it to complete.\n\n"
-                "💡 **Want to download this instead?**\n"
-                "Use `/canceldownload` to cancel the current download."
-            )
-            return
+        # Check if user already has an active download (quick check before getting client)
+        async with download_manager._lock:
+            if event.sender_id in download_manager.active_downloads:
+                await event.respond(
+                    "❌ **You already have a download in progress!**\n\n"
+                    "⏳ Please wait for it to complete.\n\n"
+                    "💡 **Want to download this instead?**\n"
+                    "Use `/canceldownload` to cancel the current download."
+                )
+                return
         
         # Check if user has personal session
         user_client, error_code = await get_user_client(event.sender_id)

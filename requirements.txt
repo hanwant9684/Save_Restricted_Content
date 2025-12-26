@@ -5,11 +5,5 @@ uvloop
 waitress
 orjson
 ffmpeg
+flask
 aiohttp
-aiohttp
-cryptg
-orjson
-psutil
-Telethon
-uvloop
-waitress
