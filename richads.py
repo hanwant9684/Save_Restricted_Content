@@ -26,7 +26,7 @@ class RichAdsManager:
         """Check if RichAds is configured"""
         return bool(self.publisher_id)
     
-    async def fetch_ad(self, language_code: str = "en", telegram_id: str = None) -> Optional[List[Dict[str, Any]]]:
+    async def fetch_ad(self, language_code: str = "en", telegram_id: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
         """Fetch ad from RichAds API"""
         if not self.is_enabled():
             return None
@@ -75,7 +75,11 @@ class RichAdsManager:
             return False
     
     async def send_ad_to_user(self, client, chat_id: int, language_code: str = "en") -> bool:
-        """Fetch and send RichAd to user as photo message"""
+        """Fetch and send RichAd to user as photo message
+        
+        RATE LIMIT HANDLING: If Telegram rate limits ad sending, log the error but return False gracefully.
+        This prevents ad sending failures from blocking media delivery to the user.
+        """
         if not self.is_enabled():
             LOGGER(__name__).debug("RichAds not enabled")
             return False
@@ -146,7 +150,18 @@ class RichAdsManager:
             return True
             
         except Exception as e:
-            LOGGER(__name__).warning(f"RichAds send error: {str(e)[:100]}")
+            error_str = str(e)
+            
+            # Check for rate limit errors (Telegram blocks with "A wait of X seconds is required")
+            if "wait of" in error_str.lower() and "seconds" in error_str.lower():
+                LOGGER(__name__).warning(
+                    f"⚠️ RichAds RATE LIMITED for user {chat_id}: {error_str[:150]}\n"
+                    f"   NOTE: Media will still be sent to user (ad sending skipped)"
+                )
+                return False
+            
+            # Log other errors
+            LOGGER(__name__).warning(f"RichAds send error: {error_str[:150]}")
             return False
 
 
