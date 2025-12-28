@@ -36,118 +36,138 @@ class DatabaseManager:
             conn = self._get_connection()
             cursor = conn.cursor()
             
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id INTEGER PRIMARY KEY,
-                    username TEXT,
-                    first_name TEXT,
-                    last_name TEXT,
-                    user_type TEXT DEFAULT 'free',
-                    subscription_end TEXT,
-                    premium_source TEXT,
-                    joined_date TEXT NOT NULL,
-                    last_activity TEXT NOT NULL,
-                    is_banned INTEGER DEFAULT 0,
-                    session_string TEXT,
-                    custom_thumbnail TEXT,
-                    ad_downloads INTEGER DEFAULT 0,
-                    ad_downloads_reset_date TEXT
-                )
-            ''')
+            # Re-verify and create tables in case they were missed
+            LOGGER(__name__).info("Ensuring all database tables exist...")
             
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS daily_usage (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    date TEXT NOT NULL,
-                    files_downloaded INTEGER DEFAULT 0,
-                    UNIQUE(user_id, date)
-                )
-            ''')
-            
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS admins (
-                    user_id INTEGER PRIMARY KEY,
-                    added_by INTEGER NOT NULL,
-                    added_date TEXT NOT NULL
-                )
-            ''')
-            
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS broadcasts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    message TEXT NOT NULL,
-                    sent_by INTEGER NOT NULL,
-                    sent_date TEXT NOT NULL,
-                    total_users INTEGER NOT NULL,
-                    successful_sends INTEGER NOT NULL
-                )
-            ''')
-            
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS ad_sessions (
-                    session_id TEXT PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    created_at TEXT NOT NULL,
-                    used INTEGER DEFAULT 0
-                )
-            ''')
-            
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS ad_verifications (
-                    code TEXT PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    created_at TEXT NOT NULL
-                )
-            ''')
-            
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS legal_acceptance (
-                    user_id INTEGER PRIMARY KEY,
-                    accepted_terms INTEGER DEFAULT 0,
-                    accepted_privacy INTEGER DEFAULT 0,
-                    acceptance_date TEXT NOT NULL,
-                    ip_address TEXT,
-                    version TEXT DEFAULT '1.0'
-                )
-            ''')
-            
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS promo_codes (
-                    code TEXT PRIMARY KEY,
-                    days_of_premium INTEGER NOT NULL,
-                    max_users INTEGER NOT NULL,
-                    usage_count INTEGER DEFAULT 0,
-                    is_active INTEGER DEFAULT 1,
-                    created_by INTEGER NOT NULL,
-                    created_date TEXT NOT NULL,
-                    expiration_date TEXT,
-                    created_at TEXT NOT NULL
-                )
-            ''')
-            
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS promo_code_usage (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    promo_code TEXT NOT NULL,
-                    used_date TEXT NOT NULL,
-                    UNIQUE(user_id, promo_code),
-                    FOREIGN KEY(promo_code) REFERENCES promo_codes(code)
-                )
-            ''')
-            
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_daily_usage_user_date ON daily_usage(user_id, date)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ad_sessions_created ON ad_sessions(created_at)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ad_verifications_created ON ad_verifications(created_at)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_legal_acceptance_date ON legal_acceptance(acceptance_date)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_promo_codes_active ON promo_codes(is_active, expiration_date)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_promo_usage_user ON promo_code_usage(user_id)')
-            
-            conn.commit()
-            conn.close()
-            
-            LOGGER(__name__).info("Database tables and indexes created successfully")
+            # Use explicit BEGIN for manual transaction control on initialization
+            cursor.execute("BEGIN")
+            try:
+                # First, check for missing columns or tables that need schema updates
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+                if cursor.fetchone():
+                    # Check if ad_downloads column exists
+                    cursor.execute("PRAGMA table_info(users)")
+                    columns = [row['name'] for row in cursor.fetchall()]
+                    if 'ad_downloads' not in columns:
+                        cursor.execute('ALTER TABLE users ADD COLUMN ad_downloads INTEGER DEFAULT 0')
+                    if 'ad_downloads_reset_date' not in columns:
+                        cursor.execute('ALTER TABLE users ADD COLUMN ad_downloads_reset_date TEXT')
+
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS users (
+                        user_id INTEGER PRIMARY KEY,
+                        username TEXT,
+                        first_name TEXT,
+                        last_name TEXT,
+                        user_type TEXT DEFAULT 'free',
+                        subscription_end TEXT,
+                        premium_source TEXT,
+                        joined_date TEXT NOT NULL,
+                        last_activity TEXT NOT NULL,
+                        is_banned INTEGER DEFAULT 0,
+                        session_string TEXT,
+                        custom_thumbnail TEXT,
+                        ad_downloads INTEGER DEFAULT 0,
+                        ad_downloads_reset_date TEXT
+                    )
+                ''')
+                
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS daily_usage (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        date TEXT NOT NULL,
+                        files_downloaded INTEGER DEFAULT 0,
+                        UNIQUE(user_id, date)
+                    )
+                ''')
+                
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS admins (
+                        user_id INTEGER PRIMARY KEY,
+                        added_by INTEGER NOT NULL,
+                        added_date TEXT NOT NULL
+                    )
+                ''')
+                
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS broadcasts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        message TEXT NOT NULL,
+                        sent_by INTEGER NOT NULL,
+                        sent_date TEXT NOT NULL,
+                        total_users INTEGER NOT NULL,
+                        successful_sends INTEGER NOT NULL
+                    )
+                ''')
+                
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS ad_sessions (
+                        session_id TEXT PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        created_at TEXT NOT NULL,
+                        used INTEGER DEFAULT 0
+                    )
+                ''')
+                
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS ad_verifications (
+                        code TEXT PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        created_at TEXT NOT NULL
+                    )
+                ''')
+                
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS legal_acceptance (
+                        user_id INTEGER PRIMARY KEY,
+                        accepted_terms INTEGER DEFAULT 0,
+                        accepted_privacy INTEGER DEFAULT 0,
+                        acceptance_date TEXT NOT NULL,
+                        ip_address TEXT,
+                        version TEXT DEFAULT '1.0'
+                    )
+                ''')
+                
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS promo_codes (
+                        code TEXT PRIMARY KEY,
+                        days_of_premium INTEGER NOT NULL,
+                        max_users INTEGER NOT NULL,
+                        usage_count INTEGER DEFAULT 0,
+                        is_active INTEGER DEFAULT 1,
+                        created_by INTEGER NOT NULL,
+                        created_date TEXT NOT NULL,
+                        expiration_date TEXT,
+                        created_at TEXT NOT NULL
+                    )
+                ''')
+                
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS promo_code_usage (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        promo_code TEXT NOT NULL,
+                        used_date TEXT NOT NULL,
+                        UNIQUE(user_id, promo_code),
+                        FOREIGN KEY(promo_code) REFERENCES promo_codes(code)
+                    )
+                ''')
+                
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_daily_usage_user_date ON daily_usage(user_id, date)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_ad_sessions_created ON ad_sessions(created_at)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_ad_verifications_created ON ad_verifications(created_at)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_legal_acceptance_date ON legal_acceptance(acceptance_date)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_promo_codes_active ON promo_codes(is_active, expiration_date)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_promo_usage_user ON promo_code_usage(user_id)')
+                
+                conn.commit()
+                LOGGER(__name__).info("Database tables and indexes verified/created successfully")
+            except Exception as e:
+                conn.rollback()
+                LOGGER(__name__).error(f"Error initializing database: {e}")
+            finally:
+                conn.close()
 
     def add_user(self, user_id: int, username: Optional[str] = None, first_name: Optional[str] = None,
                  last_name: Optional[str] = None, user_type: str = 'free') -> bool:
@@ -987,10 +1007,17 @@ class DatabaseManager:
                 conn = self._get_connection()
                 cursor = conn.cursor()
                 now = datetime.now().isoformat()
+                
+                # Render fix: Ensure table exists immediately before insertion
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='promo_codes'")
+                if not cursor.fetchone():
+                    LOGGER(__name__).warning("promo_codes table missing during creation, recreating...")
+                    self._init_database()
+
                 cursor.execute('''
                     INSERT INTO promo_codes (code, days_of_premium, max_users, created_by, created_date, expiration_date, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (code, days, max_users, created_by, now, expiration_date, now))
+                ''', (code.upper(), days, max_users, created_by, now, expiration_date, now))
                 conn.commit()
                 conn.close()
             return True
