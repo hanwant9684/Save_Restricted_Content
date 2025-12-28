@@ -231,6 +231,19 @@ async def start(event):
     welcome_text += f"\n\n💡 **Created by:** {get_creator_username()}"
     
     await send_video_message(event, 41, welcome_text, markup, "start command")
+    
+    # Show ad after welcome message (RichAds only)
+    sender = await event.get_sender()
+    lang_code = getattr(sender, 'lang_code', 'en') or 'en'
+    user_type = db.get_user_type(event.sender_id)
+    is_premium = user_type == 'paid'
+    is_admin = db.is_admin(event.sender_id)
+    
+    LOGGER(__name__).info(f"Checking for ad display: user={event.sender_id}, premium={is_premium}, admin={is_admin}, enabled={richads.is_enabled()}")
+    
+    if not (is_premium or is_admin) and richads.is_enabled():
+        LOGGER(__name__).info(f"Attempting to send RichAd to user {event.sender_id}")
+        await richads.send_ad_to_user(bot, event.chat_id, lang_code)
 
 @bot.on(events.NewMessage(pattern='/help', incoming=True, func=lambda e: e.is_private))
 @register_user
