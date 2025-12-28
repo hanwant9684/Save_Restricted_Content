@@ -112,10 +112,37 @@ class DatabaseManager:
                 )
             ''')
             
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS promo_codes (
+                    code TEXT PRIMARY KEY,
+                    days_of_premium INTEGER NOT NULL,
+                    max_users INTEGER NOT NULL,
+                    usage_count INTEGER DEFAULT 0,
+                    is_active INTEGER DEFAULT 1,
+                    created_by INTEGER NOT NULL,
+                    created_date TEXT NOT NULL,
+                    expiration_date TEXT,
+                    created_at TEXT NOT NULL
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS promo_code_usage (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    promo_code TEXT NOT NULL,
+                    used_date TEXT NOT NULL,
+                    UNIQUE(user_id, promo_code),
+                    FOREIGN KEY(promo_code) REFERENCES promo_codes(code)
+                )
+            ''')
+            
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_daily_usage_user_date ON daily_usage(user_id, date)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_ad_sessions_created ON ad_sessions(created_at)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_ad_verifications_created ON ad_verifications(created_at)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_legal_acceptance_date ON legal_acceptance(acceptance_date)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_promo_codes_active ON promo_codes(is_active, expiration_date)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_promo_usage_user ON promo_code_usage(user_id)')
             
             conn.commit()
             conn.close()
@@ -952,5 +979,151 @@ class DatabaseManager:
         except Exception as e:
             LOGGER(__name__).error(f"Error getting legal acceptance stats: {e}")
             return {'total_users': 0, 'accepted_users': 0, 'pending_users': 0}
+
+    def create_promo_code(self, code: str, days: int, max_users: int, created_by: int, expiration_date: Optional[str] = None) -> bool:
+        """Create a new promo code"""
+        try:
+            with self.lock:
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                now = datetime.now().isoformat()
+                
+                cursor.execute('''
+                    INSERT INTO promo_codes (code, days_of_premium, max_users, created_by, created_date, expiration_date, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (code, days, max_users, created_by, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), expiration_date, now))
+                conn.commit()
+                conn.close()
+            LOGGER(__name__).info(f"Created promo code {code} for {days} days, max {max_users} users")
+            return True
+        except sqlite3.IntegrityError:
+            LOGGER(__name__).warning(f"Promo code {code} already exists")
+            return False
+        except Exception as e:
+            LOGGER(__name__).error(f"Error creating promo code: {e}")
+            return False
+
+    def get_promo_code(self, code: str) -> Optional[Dict]:
+        """Get promo code details"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM promo_codes WHERE code = ?', (code,))
+            row = cursor.fetchone()
+            conn.close()
+            return dict(row) if row else None
+        except Exception as e:
+            LOGGER(__name__).error(f"Error getting promo code: {e}")
+            return None
+
+    def validate_promo_code(self, code: str, user_id: int) -> tuple[bool, str]:
+        """Validate if user can use promo code"""
+        try:
+            promo = self.get_promo_code(code)
+            
+            if not promo:
+                return False, "❌ Invalid promo code."
+            
+            if not promo['is_active']:
+                return False, "❌ This promo code has been deactivated."
+            
+            if promo['expiration_date']:
+                if datetime.now() > datetime.fromisoformat(promo['expiration_date']):
+                    return False, "⏰ This promo code has expired."
+            
+            if promo['usage_count'] >= promo['max_users']:
+                return False, "❌ This promo code has reached its usage limit."
+            
+            # Check if user already used this code
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT 1 FROM promo_code_usage WHERE user_id = ? AND promo_code = ?', (user_id, code))
+            already_used = cursor.fetchone()
+            conn.close()
+            
+            if already_used:
+                return False, "❌ You have already used this promo code."
+            
+            return True, "✅ Valid promo code"
+        except Exception as e:
+            LOGGER(__name__).error(f"Error validating promo code: {e}")
+            return False, "❌ Error validating promo code."
+
+    def apply_promo_code(self, code: str, user_id: int) -> bool:
+        """Apply promo code to user"""
+        try:
+            with self.lock:
+                promo = self.get_promo_code(code)
+                if not promo:
+                    return False
+                
+                user = self.get_user(user_id)
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                
+                # Record usage
+                cursor.execute('''
+                    INSERT INTO promo_code_usage (user_id, promo_code, used_date)
+                    VALUES (?, ?, ?)
+                ''', (user_id, code, datetime.now().isoformat()))
+                
+                # Update usage count
+                cursor.execute('UPDATE promo_codes SET usage_count = usage_count + 1 WHERE code = ?', (code,))
+                
+                # Calculate subscription end date
+                if user and user.get('user_type') in ['paid', 'admin'] and user.get('subscription_end'):
+                    # Premium user: add days to existing subscription
+                    try:
+                        current_end = datetime.fromisoformat(user.get('subscription_end'))
+                        subscription_end = (current_end + timedelta(days=promo['days_of_premium'])).isoformat()
+                    except:
+                        # Fallback if subscription_end is malformed
+                        subscription_end = (datetime.now() + timedelta(days=promo['days_of_premium'])).isoformat()
+                else:
+                    # Free user: set new premium access
+                    subscription_end = (datetime.now() + timedelta(days=promo['days_of_premium'])).isoformat()
+                
+                cursor.execute('''
+                    UPDATE users SET user_type = ?, subscription_end = ?, premium_source = ? WHERE user_id = ?
+                ''', ('paid', subscription_end, f'promo_{code}', user_id))
+                
+                conn.commit()
+                conn.close()
+            
+            self.cache.delete(f"user_{user_id}")
+            LOGGER(__name__).info(f"Applied promo code {code} to user {user_id} for {promo['days_of_premium']} days")
+            return True
+        except Exception as e:
+            LOGGER(__name__).error(f"Error applying promo code: {e}")
+            return False
+
+    def list_promo_codes(self) -> List[Dict]:
+        """List all active promo codes"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM promo_codes WHERE is_active = 1 ORDER BY created_date DESC')
+            rows = cursor.fetchall()
+            conn.close()
+            return [dict(row) for row in rows]
+        except Exception as e:
+            LOGGER(__name__).error(f"Error listing promo codes: {e}")
+            return []
+
+    def deactivate_promo_code(self, code: str) -> bool:
+        """Deactivate a promo code"""
+        try:
+            with self.lock:
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                cursor.execute('UPDATE promo_codes SET is_active = 0 WHERE code = ?', (code,))
+                success = cursor.rowcount > 0
+                conn.commit()
+                conn.close()
+            LOGGER(__name__).info(f"Deactivated promo code {code}")
+            return success
+        except Exception as e:
+            LOGGER(__name__).error(f"Error deactivating promo code: {e}")
+            return False
 
 db = DatabaseManager()
