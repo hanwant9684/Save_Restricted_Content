@@ -3,7 +3,7 @@
 
 import secrets
 from datetime import datetime, timedelta
-from typing import Tuple
+from typing import Tuple, Optional
 from logger import LOGGER
 from database_sqlite import db
 
@@ -15,7 +15,7 @@ class PromoCodeManager:
         """Generate a random promo code"""
         return secrets.token_hex(length // 2).upper()
     
-    def create_promo_code(self, days: int, max_users: int, created_by: int, expiration_date: str = None) -> Tuple[bool, str]:
+    def create_promo_code(self, days: int, max_users: int, created_by: int, expiration_date: Optional[str] = None) -> Tuple[bool, str]:
         """Create a new promo code"""
         try:
             code = self.generate_code()
@@ -49,7 +49,12 @@ class PromoCodeManager:
             
             if success:
                 promo = db.get_promo_code(code)
-                return True, f"✅ **Promo code applied!**\n\nYou now have **{promo['days_of_premium']} days** of premium access!"
+                user = db.get_user(user_id)
+                if not promo:
+                    return False, "❌ Failed to retrieve promo code details."
+                days = promo['days_of_premium']
+                end_date = user['subscription_end'] if user else "Unknown"
+                return True, f"✅ **Promo code applied!**\n\n🎁 **+{days} days** of premium access\n📅 **Expires:** `{end_date}`"
             else:
                 return False, "❌ Failed to apply promo code."
         except Exception as e:
