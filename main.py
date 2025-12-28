@@ -519,7 +519,14 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
 
         elif chat_message.media:
             start_time = time()
-            progress_message = await event.respond("**📥 Downloading Progress...**")
+            try:
+                progress_message = await event.respond("**📥 Downloading Progress...**")
+            except Exception as e:
+                if "wait of" in str(e).lower():
+                    LOGGER(__name__).warning(f"Rate limited while sending progress message for user {event.sender_id}")
+                    progress_message = None
+                else:
+                    raise
 
             filename = get_file_name(message_id, chat_message)
             download_path = get_download_path(event.id, filename)
@@ -617,11 +624,19 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
             await event.respond("**No media or text found in the post URL.**")
 
     except (PeerIdInvalidError, BadRequestError, KeyError):
-        await event.respond("**Make sure the user client is part of the chat.**")
+        try:
+            await event.respond("**Make sure the user client is part of the chat.**")
+        except Exception as e:
+            if "wait of" not in str(e).lower():
+                LOGGER(__name__).error(f"Failed to send error message: {e}")
     except Exception as e:
         error_message = f"**❌ {str(e)}**"
-        await event.respond(error_message)
-        LOGGER(__name__).error(e)
+        try:
+            await event.respond(error_message)
+        except Exception as send_error:
+            if "wait of" not in str(send_error).lower():
+                LOGGER(__name__).error(f"Failed to send error response: {send_error}")
+            LOGGER(__name__).error(e)
 
 @bot.on(events.NewMessage(pattern='/dl', incoming=True, func=lambda e: e.is_private))
 @force_subscribe
@@ -1068,18 +1083,22 @@ async def cancel_download_command(event):
     
     batch_cancelled = cancel_user_tasks(event.sender_id)
     
-    if download_cancelled or batch_cancelled > 0:
-        total_cancelled = (1 if download_cancelled else 0) + batch_cancelled
-        if batch_cancelled > 0:
-            await event.respond(
-                f"✅ **Cancelled {total_cancelled} download(s)!**\n\n"
-                "This includes any running batch downloads."
-            )
+    try:
+        if download_cancelled or batch_cancelled > 0:
+            total_cancelled = (1 if download_cancelled else 0) + batch_cancelled
+            if batch_cancelled > 0:
+                await event.respond(
+                    f"✅ **Cancelled {total_cancelled} download(s)!**\n\n"
+                    "This includes any running batch downloads."
+                )
+            else:
+                await event.respond(cancel_msg)
+            LOGGER(__name__).info(f"User {event.sender_id} cancelled {total_cancelled} download(s) (active: {download_cancelled}, batch: {batch_cancelled})")
         else:
             await event.respond(cancel_msg)
-        LOGGER(__name__).info(f"User {event.sender_id} cancelled {total_cancelled} download(s) (active: {download_cancelled}, batch: {batch_cancelled})")
-    else:
-        await event.respond(cancel_msg)
+    except Exception as e:
+        if "wait of" not in str(e).lower():
+            LOGGER(__name__).error(f"Failed to send cancel message: {e}")
 
 @bot.on(events.NewMessage(pattern='/status', incoming=True, func=lambda e: e.is_private))
 @register_user
