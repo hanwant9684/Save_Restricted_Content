@@ -15,11 +15,3 @@ psutil
 Telethon
 uvloop
 waitress
-aiohttp
-cryptg
-flask
-orjson
-psutil
-Telethon
-uvloop
-waitress

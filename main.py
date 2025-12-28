@@ -63,15 +63,11 @@ from admin_commands import (
     broadcast_command,
     admin_stats_command,
     user_info_command,
-    broadcast_callback_handler,
-    create_promo_command,
-    list_promos_command,
-    delete_promo_command
+    broadcast_callback_handler
 )
 from queue_manager import download_manager
 from legal_acceptance import show_legal_acceptance, handle_legal_callback
 from richads import richads
-from promo_codes import promo_manager
 
 # Initialize the bot client with Telethon
 # Telethon handles connection pooling and performance optimization automatically
@@ -519,14 +515,7 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
 
         elif chat_message.media:
             start_time = time()
-            try:
-                progress_message = await event.respond("**📥 Downloading Progress...**")
-            except Exception as e:
-                if "wait of" in str(e).lower():
-                    LOGGER(__name__).warning(f"Rate limited while sending progress message for user {event.sender_id}")
-                    progress_message = None
-                else:
-                    raise
+            progress_message = await event.respond("**📥 Downloading Progress...**")
 
             filename = get_file_name(message_id, chat_message)
             download_path = get_download_path(event.id, filename)
@@ -624,19 +613,11 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
             await event.respond("**No media or text found in the post URL.**")
 
     except (PeerIdInvalidError, BadRequestError, KeyError):
-        try:
-            await event.respond("**Make sure the user client is part of the chat.**")
-        except Exception as e:
-            if "wait of" not in str(e).lower():
-                LOGGER(__name__).error(f"Failed to send error message: {e}")
+        await event.respond("**Make sure the user client is part of the chat.**")
     except Exception as e:
         error_message = f"**❌ {str(e)}**"
-        try:
-            await event.respond(error_message)
-        except Exception as send_error:
-            if "wait of" not in str(send_error).lower():
-                LOGGER(__name__).error(f"Failed to send error response: {send_error}")
-            LOGGER(__name__).error(e)
+        await event.respond(error_message)
+        LOGGER(__name__).error(e)
 
 @bot.on(events.NewMessage(pattern='/dl', incoming=True, func=lambda e: e.is_private))
 @force_subscribe
@@ -1083,22 +1064,18 @@ async def cancel_download_command(event):
     
     batch_cancelled = cancel_user_tasks(event.sender_id)
     
-    try:
-        if download_cancelled or batch_cancelled > 0:
-            total_cancelled = (1 if download_cancelled else 0) + batch_cancelled
-            if batch_cancelled > 0:
-                await event.respond(
-                    f"✅ **Cancelled {total_cancelled} download(s)!**\n\n"
-                    "This includes any running batch downloads."
-                )
-            else:
-                await event.respond(cancel_msg)
-            LOGGER(__name__).info(f"User {event.sender_id} cancelled {total_cancelled} download(s) (active: {download_cancelled}, batch: {batch_cancelled})")
+    if download_cancelled or batch_cancelled > 0:
+        total_cancelled = (1 if download_cancelled else 0) + batch_cancelled
+        if batch_cancelled > 0:
+            await event.respond(
+                f"✅ **Cancelled {total_cancelled} download(s)!**\n\n"
+                "This includes any running batch downloads."
+            )
         else:
             await event.respond(cancel_msg)
-    except Exception as e:
-        if "wait of" not in str(e).lower():
-            LOGGER(__name__).error(f"Failed to send cancel message: {e}")
+        LOGGER(__name__).info(f"User {event.sender_id} cancelled {total_cancelled} download(s) (active: {download_cancelled}, batch: {batch_cancelled})")
+    else:
+        await event.respond(cancel_msg)
 
 @bot.on(events.NewMessage(pattern='/status', incoming=True, func=lambda e: e.is_private))
 @register_user
@@ -1239,18 +1216,6 @@ async def remove_admin_handler(event):
 @bot.on(events.NewMessage(pattern='/setpremium', incoming=True, func=lambda e: e.is_private))
 async def set_premium_handler(event):
     await set_premium_command(event)
-
-@bot.on(events.NewMessage(pattern='/createpromo', incoming=True, func=lambda e: e.is_private))
-async def create_promo_handler(event):
-    await create_promo_command(event)
-
-@bot.on(events.NewMessage(pattern='/listpromos', incoming=True, func=lambda e: e.is_private))
-async def list_promos_handler(event):
-    await list_promos_command(event)
-
-@bot.on(events.NewMessage(pattern='/delpromo', incoming=True, func=lambda e: e.is_private))
-async def delete_promo_handler(event):
-    await delete_promo_command(event)
 
 @bot.on(events.NewMessage(pattern='/removepremium', incoming=True, func=lambda e: e.is_private))
 async def remove_premium_handler(event):
@@ -1410,33 +1375,6 @@ async def verify_premium_command(event):
     except Exception as e:
         await event.respond(f"❌ **Error verifying code:** {str(e)}")
         LOGGER(__name__).error(f"Error in verify_premium_command: {e}")
-
-@bot.on(events.NewMessage(pattern='/applypromo', incoming=True, func=lambda e: e.is_private))
-@register_user
-async def apply_promo_command(event):
-    """Apply a promo code to get premium access"""
-    LOGGER(__name__).info(f"apply_promo_command triggered by user {event.sender_id}")
-    try:
-        command = parse_command(event.text)
-        if len(command) < 2:
-            await event.respond(
-                "**Usage:** `/applypromo <code>`\n\n"
-                "**Example:** `/applypromo ABC123DEF`\n\n"
-                "Use a valid promo code to get premium access!"
-            )
-            return
-        
-        promo_code = command[1].strip().upper()
-        success, message = promo_manager.validate_and_apply(promo_code, event.sender_id)
-        
-        await event.respond(message)
-        
-        if success:
-            LOGGER(__name__).info(f"User {event.sender_id} successfully applied promo code {promo_code}")
-        
-    except Exception as e:
-        await event.respond(f"❌ **Error applying promo code:** {str(e)}")
-        LOGGER(__name__).error(f"Error in apply_promo_command: {e}")
 
 @bot.on(events.NewMessage(pattern='/upgrade', incoming=True, func=lambda e: e.is_private))
 @register_user

@@ -26,7 +26,7 @@ class RichAdsManager:
         """Check if RichAds is configured"""
         return bool(self.publisher_id)
     
-    async def fetch_ad(self, language_code: str = "en", telegram_id: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
+    async def fetch_ad(self, language_code: str = "en", telegram_id: str = None) -> Optional[List[Dict[str, Any]]]:
         """Fetch ad from RichAds API"""
         if not self.is_enabled():
             return None
@@ -43,43 +43,44 @@ class RichAdsManager:
             payload["telegram_id"] = str(telegram_id)
         
         try:
+            LOGGER(__name__).info(f"RichAds: Fetching ads with payload: {payload}")
             async with aiohttp.ClientSession() as session:
                 async with session.post(RICHADS_API_URL, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                    LOGGER(__name__).info(f"RichAds API response status: {response.status}")
                     if response.status == 200:
                         ads = await response.json()
+                        LOGGER(__name__).info(f"RichAds API response: {ads}")
                         if ads and len(ads) > 0:
-                            LOGGER(__name__).debug(f"RichAds: Got {len(ads)} ad(s) for user {telegram_id}")
+                            LOGGER(__name__).info(f"RichAds: Received {len(ads)} ad(s) for user {telegram_id}")
                             return ads
                         LOGGER(__name__).debug(f"RichAds: No ads available for user {telegram_id}")
                         return None
                     else:
                         response_text = await response.text()
-                        LOGGER(__name__).warning(f"RichAds error {response.status}: {response_text[:100]}")
+                        LOGGER(__name__).warning(f"RichAds API error: {response.status} - {response_text}")
                         return None
         except Exception as e:
-            LOGGER(__name__).warning(f"RichAds fetch error: {str(e)[:100]}")
+            LOGGER(__name__).error(f"RichAds fetch error: {e}", exc_info=True)
             return None
     
     async def notify_impression(self, notification_url: str) -> bool:
         """Notify RichAds that ad impression happened"""
         try:
+            LOGGER(__name__).info(f"RichAds: Notifying impression with URL: {notification_url}")
             async with aiohttp.ClientSession() as session:
                 async with session.get(notification_url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                    LOGGER(__name__).info(f"RichAds impression notification response: {response.status}")
                     if response.status == 200:
-                        LOGGER(__name__).debug("RichAds impression tracked")
+                        LOGGER(__name__).info("RichAds impression notified successfully")
                         return True
-                    LOGGER(__name__).warning(f"RichAds impression failed: {response.status}")
+                    LOGGER(__name__).warning(f"RichAds impression failed with status: {response.status}")
                     return False
         except Exception as e:
-            LOGGER(__name__).warning(f"RichAds impression error: {str(e)[:100]}")
+            LOGGER(__name__).error(f"RichAds impression notify error: {e}", exc_info=True)
             return False
     
     async def send_ad_to_user(self, client, chat_id: int, language_code: str = "en") -> bool:
-        """Fetch and send RichAd to user as photo message
-        
-        RATE LIMIT HANDLING: If Telegram rate limits ad sending, log the error but return False gracefully.
-        This prevents ad sending failures from blocking media delivery to the user.
-        """
+        """Fetch and send RichAd to user as photo message"""
         if not self.is_enabled():
             LOGGER(__name__).debug("RichAds not enabled")
             return False
@@ -147,21 +148,11 @@ class RichAdsManager:
             if ad.get("notification_url"):
                 await self.notify_impression(ad["notification_url"])
             
+            LOGGER(__name__).info(f"RichAd sent to user {chat_id}")
             return True
             
         except Exception as e:
-            error_str = str(e)
-            
-            # Check for rate limit errors (Telegram blocks with "A wait of X seconds is required")
-            if "wait of" in error_str.lower() and "seconds" in error_str.lower():
-                LOGGER(__name__).warning(
-                    f"⚠️ RichAds RATE LIMITED for user {chat_id}: {error_str[:150]}\n"
-                    f"   NOTE: Media will still be sent to user (ad sending skipped)"
-                )
-                return False
-            
-            # Log other errors
-            LOGGER(__name__).warning(f"RichAds send error: {error_str[:150]}")
+            LOGGER(__name__).error(f"Error sending RichAd to {chat_id}: {e}")
             return False
 
 

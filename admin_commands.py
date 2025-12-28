@@ -7,8 +7,6 @@ from telethon_helpers import InlineKeyboardButton, InlineKeyboardMarkup, parse_c
 from access_control import admin_only, register_user
 from database_sqlite import db
 from logger import LOGGER
-from promo_codes import promo_manager
-from datetime import datetime, timedelta
 
 @admin_only
 async def add_admin_command(event):
@@ -428,82 +426,6 @@ async def user_info_command(event):
     except Exception as e:
         await event.respond(f"❌ **Error: {str(e)}**")
         LOGGER(__name__).error(f"Error in user_info_command: {e}")
-
-@admin_only
-async def create_promo_command(event):
-    """Create a new promo code"""
-    try:
-        args = get_command_args(event.text)
-        
-        if len(args) < 2:
-            await event.respond(
-                "**Usage:** `/createpromo <days> <max_users> [expiration_date]`\n\n"
-                "**Example:** `/createpromo 30 100` - 30 days, max 100 users\n"
-                "**Example:** `/createpromo 7 50 2025-12-31` - 7 days, max 50 users, expires Dec 31\n\n"
-                "**Date format:** YYYY-MM-DD"
-            )
-            return
-        
-        days = int(args[0])
-        max_users = int(args[1])
-        expiration_date = args[2] if len(args) > 2 else None
-        
-        if days < 1 or max_users < 1:
-            await event.respond("❌ Days and max users must be at least 1")
-            return
-        
-        success, code = promo_manager.create_promo_code(days, max_users, event.sender_id, expiration_date)
-        
-        if success:
-            await event.respond(
-                f"✅ **Promo Code Created!**\n\n"
-                f"**Code:** `{code}`\n"
-                f"**Duration:** `{days} days`\n"
-                f"**Max Users:** `{max_users}`\n"
-                f"**Expires:** `{expiration_date or 'Never'}`\n\n"
-                f"Users can apply with: `/applypromo {code}`"
-            )
-            LOGGER(__name__).info(f"Admin {event.sender_id} created promo code {code}")
-        else:
-            await event.respond(f"❌ Failed to create promo code: {code}")
-    
-    except ValueError:
-        await event.respond("❌ Invalid input. Days and max users must be numbers.")
-    except Exception as e:
-        await event.respond(f"❌ Error: {str(e)}")
-        LOGGER(__name__).error(f"Error in create_promo_command: {e}")
-
-@admin_only
-async def list_promos_command(event):
-    """List all active promo codes"""
-    try:
-        stats = promo_manager.get_promo_stats()
-        await event.respond(stats)
-    except Exception as e:
-        await event.respond(f"❌ Error: {str(e)}")
-        LOGGER(__name__).error(f"Error in list_promos_command: {e}")
-
-@admin_only
-async def delete_promo_command(event):
-    """Delete/deactivate a promo code"""
-    try:
-        args = get_command_args(event.text)
-        
-        if len(args) < 1:
-            await event.respond("**Usage:** `/delpromo <code>`")
-            return
-        
-        code = args[0].upper()
-        
-        if db.deactivate_promo_code(code):
-            await event.respond(f"✅ **Promo code `{code}` has been deactivated.**")
-            LOGGER(__name__).info(f"Admin {event.sender_id} deactivated promo code {code}")
-        else:
-            await event.respond("❌ **Promo code not found or error occurred.**")
-    
-    except Exception as e:
-        await event.respond(f"❌ Error: {str(e)}")
-        LOGGER(__name__).error(f"Error in delete_promo_command: {e}")
 
 async def broadcast_callback_handler(event):
     """Handle broadcast confirmation callbacks"""
