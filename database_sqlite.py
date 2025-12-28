@@ -36,9 +36,6 @@ class DatabaseManager:
             conn = self._get_connection()
             cursor = conn.cursor()
             
-            # Re-verify and create tables in case they were missed
-            LOGGER(__name__).info("Ensuring all database tables exist...")
-            
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     user_id INTEGER PRIMARY KEY,
@@ -150,7 +147,7 @@ class DatabaseManager:
             conn.commit()
             conn.close()
             
-            LOGGER(__name__).info("Database tables and indexes verified/created successfully")
+            LOGGER(__name__).info("Database tables and indexes created successfully")
 
     def add_user(self, user_id: int, username: Optional[str] = None, first_name: Optional[str] = None,
                  last_name: Optional[str] = None, user_type: str = 'free') -> bool:
@@ -990,17 +987,10 @@ class DatabaseManager:
                 conn = self._get_connection()
                 cursor = conn.cursor()
                 now = datetime.now().isoformat()
-                
-                # Render fix: Ensure table exists immediately before insertion
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='promo_codes'")
-                if not cursor.fetchone():
-                    LOGGER(__name__).warning("promo_codes table missing during creation, recreating...")
-                    self._init_database()
-
                 cursor.execute('''
                     INSERT INTO promo_codes (code, days_of_premium, max_users, created_by, created_date, expiration_date, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (code.upper(), days, max_users, created_by, now, expiration_date, now))
+                ''', (code, days, max_users, created_by, now, expiration_date, now))
                 conn.commit()
                 conn.close()
             return True
