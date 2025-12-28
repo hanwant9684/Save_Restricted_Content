@@ -990,10 +990,17 @@ class DatabaseManager:
                 conn = self._get_connection()
                 cursor = conn.cursor()
                 now = datetime.now().isoformat()
+                
+                # Render fix: Ensure table exists immediately before insertion
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='promo_codes'")
+                if not cursor.fetchone():
+                    LOGGER(__name__).warning("promo_codes table missing during creation, recreating...")
+                    self._init_database()
+
                 cursor.execute('''
                     INSERT INTO promo_codes (code, days_of_premium, max_users, created_by, created_date, expiration_date, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (code, days, max_users, created_by, now, expiration_date, now))
+                ''', (code.upper(), days, max_users, created_by, now, expiration_date, now))
                 conn.commit()
                 conn.close()
             return True
