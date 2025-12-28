@@ -36,6 +36,9 @@ class DatabaseManager:
             conn = self._get_connection()
             cursor = conn.cursor()
             
+            # Re-verify and create tables in case they were missed
+            LOGGER(__name__).info("Ensuring all database tables exist...")
+            
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     user_id INTEGER PRIMARY KEY,
@@ -147,7 +150,7 @@ class DatabaseManager:
             conn.commit()
             conn.close()
             
-            LOGGER(__name__).info("Database tables and indexes created successfully")
+            LOGGER(__name__).info("Database tables and indexes verified/created successfully")
 
     def add_user(self, user_id: int, username: Optional[str] = None, first_name: Optional[str] = None,
                  last_name: Optional[str] = None, user_type: str = 'free') -> bool:
