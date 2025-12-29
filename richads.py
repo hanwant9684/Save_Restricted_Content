@@ -30,8 +30,6 @@ class RichAdsManager:
         """Fetch ad from RichAds API"""
         if not self.is_enabled():
             return None
-        
-        LOGGER(__name__).info(f"RichAds: Fetching ad for user {telegram_id} (lang: {language_code})")
             
         payload = {
             "language_code": language_code[:2].lower() if language_code else "en",
@@ -50,13 +48,13 @@ class RichAdsManager:
                     if response.status == 200:
                         ads = await response.json()
                         if ads and len(ads) > 0:
-                            LOGGER(__name__).info(f"RichAds: Successfully got {len(ads)} ad(s) for user {telegram_id}")
+                            LOGGER(__name__).debug(f"RichAds: Got {len(ads)} ad(s) for user {telegram_id}")
                             return ads
-                        LOGGER(__name__).info(f"RichAds: No ads available from API for user {telegram_id}")
+                        LOGGER(__name__).debug(f"RichAds: No ads available for user {telegram_id}")
                         return None
                     else:
                         response_text = await response.text()
-                        LOGGER(__name__).warning(f"RichAds API error {response.status}: {response_text[:100]}")
+                        LOGGER(__name__).warning(f"RichAds error {response.status}: {response_text[:100]}")
                         return None
         except Exception as e:
             LOGGER(__name__).warning(f"RichAds fetch error: {str(e)[:100]}")
@@ -95,6 +93,7 @@ class RichAdsManager:
             notification_url = ad.get("notification_url", "")
             if notification_url:
                 notification_url = html.unescape(notification_url)
+                ad["notification_url"] = notification_url
             
             click_url = ad.get("link", "")
             if click_url:
@@ -141,8 +140,8 @@ class RichAdsManager:
                 )
             
             # Notify impression
-            if notification_url:
-                await self.notify_impression(notification_url)
+            if ad.get("notification_url"):
+                await self.notify_impression(ad["notification_url"])
             
             return True
             

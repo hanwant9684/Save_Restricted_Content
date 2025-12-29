@@ -8,7 +8,7 @@ from telethon_helpers import InlineKeyboardButton, InlineKeyboardMarkup
 from logger import LOGGER
 
 from database_sqlite import db
-from richads import richads
+from ad_manager import ad_manager
 
 LEGAL_DIR = "legal"
 TERMS_FILE = os.path.join(LEGAL_DIR, "terms_and_conditions.txt")
@@ -122,14 +122,14 @@ async def show_legal_acceptance(event, bot=None):
         await event.respond(summary, buttons=markup.to_telethon(), link_preview=False)
         LOGGER(__name__).info(f"Shown legal acceptance screen to user {event.sender_id}")
         
-        # Show RichAd below legal acceptance if bot client is provided
-        if bot and richads.is_enabled():
+        # Show ad below legal acceptance if bot client is provided
+        if bot and ad_manager.is_any_enabled():
             try:
                 sender = await event.get_sender()
                 lang_code = getattr(sender, 'lang_code', 'en') or 'en'
-                await richads.send_ad_to_user(bot, event.chat_id, lang_code)
+                await ad_manager.send_ad_with_fallback(bot, event.sender_id, event.chat_id, lang_code, is_premium=is_premium, is_admin=is_admin)
             except Exception as ad_error:
-                LOGGER(__name__).warning(f"Failed to send RichAd after legal acceptance: {ad_error}")
+                LOGGER(__name__).warning(f"Failed to send ad after legal acceptance: {ad_error}")
         
     except Exception as e:
         LOGGER(__name__).error(f"Error showing legal acceptance: {e}")

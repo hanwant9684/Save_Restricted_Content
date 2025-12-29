@@ -72,14 +72,40 @@ from promo_codes import promo_manager
 from queue_manager import download_manager
 from legal_acceptance import show_legal_acceptance, handle_legal_callback
 from richads import richads
+from ad_manager import ad_manager
+
+from cloud_backup import restore_latest_from_cloud, periodic_cloud_backup
 
 # Initialize the bot client with Telethon
-# Telethon handles connection pooling and performance optimization automatically
 bot = TelegramClient(
     'media_bot',
     PyroConf.API_ID,
     PyroConf.API_HASH
 )
+
+async def main():
+    # Set bot start time for filtering old updates
+    bot.start_time = time()
+    
+    # Restore latest backup from GitHub on startup
+    if PyroConf.CLOUD_BACKUP_SERVICE == "github":
+        try:
+            await restore_latest_from_cloud()
+        except Exception as e:
+            LOGGER(__name__).error(f"Initial restore failed: {e}")
+    
+    # Start the bot
+    await bot.start(bot_token=PyroConf.BOT_TOKEN)
+    
+    # Start periodic backups in background
+    if PyroConf.CLOUD_BACKUP_SERVICE == "github":
+        asyncio.create_task(periodic_cloud_backup(interval_minutes=30))
+    
+    LOGGER(__name__).info("Bot started successfully")
+    await bot.run_until_disconnected()
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
 # REMOVED: Global user client was bypassing SessionManager and wasting 30-100MB RAM
 # All users (including admins) must login with /login command to use SessionManager
@@ -232,18 +258,14 @@ async def start(event):
     
     await send_video_message(event, 41, welcome_text, markup, "start command")
     
-    # Show ad after welcome message (RichAds only)
+    # Show ad after welcome message (RichAds first, fallback logic in ad_manager)
     sender = await event.get_sender()
     lang_code = getattr(sender, 'lang_code', 'en') or 'en'
     user_type = db.get_user_type(event.sender_id)
     is_premium = user_type == 'paid'
     is_admin = db.is_admin(event.sender_id)
     
-    LOGGER(__name__).info(f"Checking for ad display: user={event.sender_id}, premium={is_premium}, admin={is_admin}, enabled={richads.is_enabled()}")
-    
-    if not (is_premium or is_admin) and richads.is_enabled():
-        LOGGER(__name__).info(f"Attempting to send RichAd to user {event.sender_id}")
-        await richads.send_ad_to_user(bot, event.chat_id, lang_code)
+    await ad_manager.send_ad_with_fallback(bot, event.sender_id, event.chat_id, lang_code, is_premium=is_premium, is_admin=is_admin)
 
 @bot.on(events.NewMessage(pattern='/help', incoming=True, func=lambda e: e.is_private))
 @register_user
@@ -510,13 +532,7 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                     )
                     
                     # Show RichAds after download completes for free users
-                    if richads.is_enabled():
-                        try:
-                            sender = await event.get_sender()
-                            lang_code = getattr(sender, 'lang_code', 'en') or 'en'
-                            await richads.send_ad_to_user(bot, event.chat_id, lang_code)
-                        except Exception as ad_error:
-                            LOGGER(__name__).warning(f"Failed to send RichAd after download: {ad_error}")
+                    await ad_manager.send_ad_with_fallback(bot_client, event.sender_id, event.chat_id, is_premium=False, is_admin=False)
                 else:
                     # Premium/Admin users: simple completion message without buttons
                     await event.respond("✅ **Download complete**")
