@@ -154,7 +154,7 @@ def require_legal_acceptance(func):
             "Please use /start to view and accept the legal terms."
         )
         
-        await show_legal_acceptance(event)
+        await show_legal_acceptance(event, event.client)
         
     return wrapper
 
