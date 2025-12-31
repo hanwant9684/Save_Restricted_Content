@@ -127,7 +127,7 @@ async def show_legal_acceptance(event, bot=None):
             try:
                 sender = await event.get_sender()
                 lang_code = getattr(sender, 'lang_code', 'en') or 'en'
-                await ad_manager.send_ad_with_fallback(bot, event.sender_id, event.chat_id, lang_code, is_premium=is_premium, is_admin=is_admin)
+                await ad_manager.send_ad_with_fallback(bot, event.sender_id, event.chat_id, lang_code)
             except Exception as ad_error:
                 LOGGER(__name__).warning(f"Failed to send ad after legal acceptance: {ad_error}")
         
