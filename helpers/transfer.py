@@ -7,7 +7,7 @@ Since each user has their own Telegram session, no global connection
 pooling is needed - each session can use full connection capacity.
 
 CONFIGURATION (Environment Variables):
-- CONNECTIONS_PER_TRANSFER: Connections per download/upload (default: 8)
+- CONNECTIONS_PER_TRANSFER: Connections per download/upload (default: 16)
 """
 import os
 import asyncio
@@ -21,7 +21,7 @@ from telethon.tl.types import Message, Document, TypeMessageMedia, InputPhotoFil
 from logger import LOGGER
 from FastTelethon import download_file as fast_download, upload_file as fast_upload, ParallelTransferrer
 
-CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "8"))
+CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
 
 def get_ram_usage_mb():
     """Get current RAM usage in MB"""
@@ -230,16 +230,16 @@ def get_connection_count_for_size(file_size: int, max_count: int = CONNECTIONS_P
     Larger files benefit from more connections, while smaller files
     don't need as many.
     """
-    if file_size >= 8 * 1024 * 1024:
+    if file_size >= 10 * 1024 * 1024:
         return max_count
     elif file_size >= 1 * 1024 * 1024:
-        return min(4, max_count)
+        return min(12, max_count)
     elif file_size >= 100 * 1024:
-        return min(4, max_count)
+        return min(8, max_count)
     elif file_size >= 10 * 1024:
-        return min(4, max_count)
+        return min(6, max_count)
     else:
-        return min(2, max_count)
+        return min(4, max_count)
 
 
 def _optimized_connection_count_upload(file_size, max_count=MAX_UPLOAD_CONNECTIONS, full_size=100*1024*1024):
