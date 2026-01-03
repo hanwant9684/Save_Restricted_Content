@@ -21,7 +21,7 @@ from telethon.tl.types import Message, Document, TypeMessageMedia, InputPhotoFil
 from logger import LOGGER
 from FastTelethon import download_file as fast_download, upload_file as fast_upload, ParallelTransferrer
 
-CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
+CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "8"))
 
 def get_ram_usage_mb():
     """Get current RAM usage in MB"""
@@ -230,14 +230,14 @@ def get_connection_count_for_size(file_size: int, max_count: int = CONNECTIONS_P
     Larger files benefit from more connections, while smaller files
     don't need as many.
     """
-    if file_size >= 10 * 1024 * 1024:
+    if file_size >= 50 * 1024 * 1024:
         return max_count
-    elif file_size >= 1 * 1024 * 1024:
-        return min(12, max_count)
-    elif file_size >= 100 * 1024:
-        return min(8, max_count)
-    elif file_size >= 10 * 1024:
+    elif file_size >= 10 * 1024 * 1024:
         return min(6, max_count)
+    elif file_size >= 1 * 1024 * 1024:
+        return min(4, max_count)
+    elif file_size >= 10 * 1024:
+        return min(2, max_count)
     else:
         return min(4, max_count)
 
