@@ -63,12 +63,18 @@ from admin_commands import (
     broadcast_command,
     admin_stats_command,
     user_info_command,
-    broadcast_callback_handler
+    broadcast_callback_handler,
+    create_promo_command,
+    list_promos_command,
+    delete_promo_command
 )
+from promo_codes import promo_manager
 from queue_manager import download_manager
 from legal_acceptance import show_legal_acceptance, handle_legal_callback
 from richads import richads
 from ad_manager import ad_manager
+
+from cloud_backup import restore_latest_from_cloud, periodic_cloud_backup
 
 # Initialize the bot client with Telethon
 # Telethon handles connection pooling and performance optimization automatically
@@ -178,7 +184,7 @@ async def start(event):
         # Wait a tiny bit to ensure message order in some clients, though usually not needed
         await asyncio.sleep(1)
         
-        await show_legal_acceptance(event)
+        await show_legal_acceptance(event, bot)
         return
     
     # Check if this is a verification deep link (format: /start verify_CODE)
@@ -1757,15 +1763,72 @@ async def verify_dump_channel():
 # This ensures downloaded files are cleaned up every 30 minutes to prevent memory/disk leaks
 
 if __name__ == "__main__":
+    @bot.on(events.CallbackQuery(data=b"watch_ad_now"))
+    async def watch_ad_callback(event):
+        """Handle the 'Watch Ad & Get Downloads' button callback"""
+        user_id = event.sender_id
+        sender = await event.get_sender()
+        lang_code = getattr(sender, 'lang_code', 'en') or 'en'
+        
+        # Show the ad
+        success = await richads.send_ad_to_user(bot, event.chat_id, lang_code)
+        
+        if success:
+            # Increment ad downloads quota in DB
+            db.add_ad_downloads(user_id, PREMIUM_DOWNLOADS)
+            await event.respond(f"✅ **Ad watched!**\n\n🎁 You've received **{PREMIUM_DOWNLOADS}** extra downloads for this session!")
+            LOGGER(__name__).info(f"User {user_id} watched ad via button and got {PREMIUM_DOWNLOADS} downloads")
+        else:
+            # Fallback to original watch ad (blog link) if RichAds has no ads
+            from ad_monetization import ad_monetization
+            from config import PyroConf
+            
+            bot_domain = PyroConf.get_app_url()
+            session_id, ad_url = ad_monetization.generate_ad_link(user_id, bot_domain)
+            
+            markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton.url("🔗 Watch Ad Now", ad_url)],
+                [InlineKeyboardButton.callback("✅ Verify Completion", f"verify_ad_{session_id}")]
+            ])
+            
+            await event.respond(
+                "📺 **No direct ads available right now.**\n\n"
+                "Don't worry! You can still get your **5 free downloads** by watching an ad on our website.\n\n"
+                "1. Click the button below\n"
+                "2. Complete the ad on the page\n"
+                "3. Come back and click 'Verify Completion'",
+                buttons=markup.to_telethon()
+            )
+            LOGGER(__name__).info(f"User {user_id} failed to get RichAd, falling back to blog ad link")
+
+    @bot.on(events.CallbackQuery(data=b"upgrade_premium"))
+    async def upgrade_premium_callback(event):
+        """Handle 'Upgrade to Premium' button callback"""
+        # Redirect to upgrade command logic
+        from admin_commands import user_info_command
+        await event.respond("💎 **Premium Access**\n\nUpgrade for unlimited downloads and priority access.\nUse `/upgrade` to see payment options.")
+        await event.answer()
+
     async def main():
         from queue_manager import download_manager
         from helpers.session_manager import session_manager
         from helpers.cleanup import start_periodic_cleanup
         
         try:
+            # Restore latest backup from GitHub on startup
+            if PyroConf.CLOUD_BACKUP_SERVICE == "github":
+                try:
+                    await restore_latest_from_cloud()
+                except Exception as e:
+                    LOGGER(__name__).error(f"Initial restore failed: {e}")
+
             await bot.start(bot_token=PyroConf.BOT_TOKEN)
             await download_manager.start_processor()
             LOGGER(__name__).info("Download queue processor initialized")
+            
+            # Start periodic backups in background
+            if PyroConf.CLOUD_BACKUP_SERVICE == "github":
+                asyncio.create_task(periodic_cloud_backup(interval_minutes=30))
             
             # Start cleanup tasks to prevent memory and disk leaks
             phone_auth_handler.start_cleanup_task()
@@ -1794,6 +1857,23 @@ if __name__ == "__main__":
             LOGGER(__name__).info("Download manager sweep task started")
             
             LOGGER(__name__).info("Bot Started!")
+
+            @bot.on(events.NewMessage(pattern='/promo', incoming=True, func=lambda e: e.is_private))
+            @register_user
+            async def promo_handler(event):
+                """Handle /promo <code> command"""
+                try:
+                    args = get_command_args(event.text)
+                    if len(args) < 1:
+                        await event.respond("**Usage:** `/promo <code>`")
+                        return
+                    
+                    code = args[0].upper()
+                    success, message = promo_manager.validate_and_apply(code, event.sender_id)
+                    await event.respond(message)
+                except Exception as e:
+                    await event.respond(f"❌ **Error:** {str(e)}")
+
             await bot.run_until_disconnected()
         except KeyboardInterrupt:
             pass
