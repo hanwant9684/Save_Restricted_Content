@@ -41,12 +41,6 @@ class PyroConf:
     # Ad Monetization - Droplink.co
     # API key is stored in .env file (DROPLINK_API_KEY)
     
-    # RichAds Configuration
-    RICHADS_PUBLISHER_ID = os.getenv("RICHADS_PUBLISHER_ID", "")
-    RICHADS_WIDGET_ID = os.getenv("RICHADS_WIDGET_ID", "")
-    RICHADS_PRODUCTION = os.getenv("RICHADS_PRODUCTION", "true").lower() == "true"
-    RICHADS_AD_COOLDOWN = 300  # 5 minutes cooldown between ad displays
-    
     # Cloud Backup Configuration (GitHub)
     CLOUD_BACKUP_SERVICE = os.getenv("CLOUD_BACKUP_SERVICE", "").lower().strip()
     GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
@@ -91,11 +85,11 @@ class PyroConf:
     
     # Connection Configuration for Transfers
     # Since each user has their own session, no global pooling is needed
-    # Each transfer can use up to this many connections (default: 8)
+    # Each transfer can use up to this many connections (default: 16)
     try:
-        CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "8"))
+        CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
     except ValueError:
-        CONNECTIONS_PER_TRANSFER = 8
+        CONNECTIONS_PER_TRANSFER = 16
     
     @staticmethod
     def get_app_url() -> str:

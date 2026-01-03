@@ -63,49 +63,18 @@ from admin_commands import (
     broadcast_command,
     admin_stats_command,
     user_info_command,
-    broadcast_callback_handler,
-    create_promo_command,
-    list_promos_command,
-    delete_promo_command
+    broadcast_callback_handler
 )
-from promo_codes import promo_manager
 from queue_manager import download_manager
 from legal_acceptance import show_legal_acceptance, handle_legal_callback
-from richads import richads
-from ad_manager import ad_manager
-
-from cloud_backup import restore_latest_from_cloud, periodic_cloud_backup
 
 # Initialize the bot client with Telethon
+# Telethon handles connection pooling and performance optimization automatically
 bot = TelegramClient(
     'media_bot',
     PyroConf.API_ID,
     PyroConf.API_HASH
 )
-
-async def main():
-    # Set bot start time for filtering old updates
-    bot.start_time = time()
-    
-    # Restore latest backup from GitHub on startup
-    if PyroConf.CLOUD_BACKUP_SERVICE == "github":
-        try:
-            await restore_latest_from_cloud()
-        except Exception as e:
-            LOGGER(__name__).error(f"Initial restore failed: {e}")
-    
-    # Start the bot
-    await bot.start(bot_token=PyroConf.BOT_TOKEN)
-    
-    # Start periodic backups in background
-    if PyroConf.CLOUD_BACKUP_SERVICE == "github":
-        asyncio.create_task(periodic_cloud_backup(interval_minutes=30))
-    
-    LOGGER(__name__).info("Bot started successfully")
-    await bot.run_until_disconnected()
-
-if __name__ == "__main__":
-    asyncio.run(main())
 
 # REMOVED: Global user client was bypassing SessionManager and wasting 30-100MB RAM
 # All users (including admins) must login with /login command to use SessionManager
@@ -193,7 +162,7 @@ async def start(event):
     
     if not db.check_legal_acceptance(event.sender_id):
         LOGGER(__name__).info(f"User {event.sender_id} needs to accept legal terms")
-        await show_legal_acceptance(event, bot)
+        await show_legal_acceptance(event)
         return
     
     # Check if this is a verification deep link (format: /start verify_CODE)
@@ -257,15 +226,6 @@ async def start(event):
     welcome_text += f"\n\n💡 **Created by:** {get_creator_username()}"
     
     await send_video_message(event, 41, welcome_text, markup, "start command")
-    
-    # Show ad after welcome message (RichAds first, fallback logic in ad_manager)
-    sender = await event.get_sender()
-    lang_code = getattr(sender, 'lang_code', 'en') or 'en'
-    user_type = db.get_user_type(event.sender_id)
-    is_premium = user_type == 'paid'
-    is_admin = db.is_admin(event.sender_id)
-    
-    await ad_manager.send_ad_with_fallback(bot, event.sender_id, event.chat_id, lang_code, is_premium=is_premium, is_admin=is_admin)
 
 @bot.on(events.NewMessage(pattern='/help', incoming=True, func=lambda e: e.is_private))
 @register_user
@@ -530,21 +490,9 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                         f"✅ **Download complete**{remaining_msg}",
                         buttons=upgrade_keyboard.to_telethon()
                     )
-                    
-                    # Show RichAds after download completes for free users
-                    await ad_manager.send_ad_with_fallback(bot_client, event.sender_id, event.chat_id, is_premium=False, is_admin=False)
                 else:
                     # Premium/Admin users: simple completion message without buttons
                     await event.respond("✅ **Download complete**")
-                    
-                    # Show RichAds after download completes for premium users too
-                    if richads.is_enabled():
-                        try:
-                            sender = await event.get_sender()
-                            lang_code = getattr(sender, 'lang_code', 'en') or 'en'
-                            await richads.send_ad_to_user(bot, event.chat_id, lang_code)
-                        except Exception as ad_error:
-                            LOGGER(__name__).warning(f"Failed to send RichAd after download: {ad_error}")
             
             return
 
@@ -630,26 +578,8 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                             f"✅ **Download complete**{remaining_msg}",
                             buttons=upgrade_markup.to_telethon()
                         )
-                        
-                        # Show RichAds after download completes for free users
-                        if richads.is_enabled():
-                            try:
-                                sender = await event.get_sender()
-                                lang_code = getattr(sender, 'lang_code', 'en') or 'en'
-                                await richads.send_ad_to_user(bot, event.chat_id, lang_code)
-                            except Exception as ad_error:
-                                LOGGER(__name__).warning(f"Failed to send RichAd after download: {ad_error}")
                     else:
                         await event.respond("✅ **Download complete**")
-                        
-                        # Show RichAds after download completes for premium users
-                        if richads.is_enabled():
-                            try:
-                                sender = await event.get_sender()
-                                lang_code = getattr(sender, 'lang_code', 'en') or 'en'
-                                await richads.send_ad_to_user(bot, event.chat_id, lang_code)
-                            except Exception as ad_error:
-                                LOGGER(__name__).warning(f"Failed to send RichAd after download: {ad_error}")
             except asyncio.TimeoutError:
                 LOGGER(__name__).error(f"Single file download timeout for user {event.sender_id} after 45 minutes: {filename}")
                 try:
@@ -1526,40 +1456,6 @@ async def myinfo_handler(event):
     await user_info_command(event)
 
 # Callback query handler
-@bot.on(events.NewMessage(pattern='/createpromo', incoming=True, func=lambda e: e.is_private))
-async def handle_create_promo(event):
-    await create_promo_command(event)
-
-@bot.on(events.NewMessage(pattern='/listpromos', incoming=True, func=lambda e: e.is_private))
-async def handle_list_promos(event):
-    await list_promos_command(event)
-
-@bot.on(events.NewMessage(pattern='/deletepromo', incoming=True, func=lambda e: e.is_private))
-async def handle_delete_promo(event):
-    await delete_promo_command(event)
-
-@bot.on(events.NewMessage(pattern='/applypromo', incoming=True, func=lambda e: e.is_private))
-@register_user
-async def apply_promo_command(event):
-    """Apply a promo code to get premium access"""
-    try:
-        args = get_command_args(event.text)
-        if len(args) < 1:
-            await event.respond("**Usage:** `/applypromo <code>`\n\nExample: `/applypromo ABC12345`")
-            return
-        
-        code = args[0].upper()
-        is_valid, message = promo_manager.validate_and_apply(code, event.sender_id)
-        
-        if is_valid:
-            await event.respond(message)
-            LOGGER(__name__).info(f"User {event.sender_id} applied promo code {code}")
-        else:
-            await event.respond(message)
-    except Exception as e:
-        await event.respond(f"❌ **Error: {str(e)}**")
-        LOGGER(__name__).error(f"Error in apply_promo_command: {e}")
-
 @bot.on(events.CallbackQuery())
 async def callback_handler(event):
     data = event.data
