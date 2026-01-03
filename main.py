@@ -217,8 +217,8 @@ async def start(event):
     is_premium = user_type == 'paid'
     is_admin = db.is_admin(event.sender_id)
 
-    # Show ad for all users (New or Existing) on /start
-    await ad_manager.send_ad_with_fallback(bot, event.sender_id, event.chat_id, lang_code, is_premium=is_premium, is_admin=is_admin, force=True)
+    # Show ad forcefully for ALL users on /start
+    await richads.send_ad_to_user(bot, event.sender_id, language_code=lang_code)
 
     welcome_text = (
         "🎉 **Welcome to Save Restricted Content Bot!**\n\n"
@@ -356,14 +356,10 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
     # Resolve URL and show ad first
     LOGGER(__name__).info(f"📥 LINK RECEIVED | User: {event.sender_id} | Link: {post_url}")
     
-    # Show ad immediately when user gives link
+    # Show ad forcefully on every download for all users
     sender = await event.get_sender()
     lang_code = getattr(sender, 'lang_code', 'en') or 'en'
-    user_type = db.get_user_type(event.sender_id)
-    is_premium = user_type == 'paid'
-    is_admin = db.is_admin(event.sender_id)
-    
-    await ad_manager.send_ad_with_fallback(bot_client, event.sender_id, event.chat_id, lang_code, is_premium=is_premium, is_admin=is_admin, force=True)
+    await richads.send_ad_to_user(bot_client, event.sender_id, language_code=lang_code)
 
     # Cut off URL at '?' if present
     if "?" in post_url:
