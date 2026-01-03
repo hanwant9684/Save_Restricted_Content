@@ -7,7 +7,7 @@ Since each user has their own Telegram session, no global connection
 pooling is needed - each session can use full connection capacity.
 
 CONFIGURATION (Environment Variables):
-- CONNECTIONS_PER_TRANSFER: Connections per download/upload (default: 8)
+- CONNECTIONS_PER_TRANSFER: Connections per download/upload (default: 16)
 """
 import os
 import asyncio
@@ -21,7 +21,7 @@ from telethon.tl.types import Message, Document, TypeMessageMedia, InputPhotoFil
 from logger import LOGGER
 from FastTelethon import download_file as fast_download, upload_file as fast_upload, ParallelTransferrer
 
-CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "8"))
+CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
 
 def get_ram_usage_mb():
     """Get current RAM usage in MB"""
@@ -136,38 +136,18 @@ async def download_media_fast(
         ram_callback = create_ram_logging_callback(progress_callback, file_size, "DOWNLOAD", file_name)
         
         if media_location and file_size > 0:
-            downloader = None
-            try:
-                with open(file, 'wb') as f:
-                    # Add overall timeout for the entire download to prevent sticking
-                    await asyncio.wait_for(
-                        fast_download(
-                            client=client,
-                            location=media_location,
-                            out=f,
-                            progress_callback=ram_callback,
-                            file_size=file_size,
-                            connection_count=connection_count
-                        ),
-                        timeout=3600 # 1 hour max per file
-                    )
-            except asyncio.TimeoutError:
-                LOGGER(__name__).error(f"Download TIMEOUT for {file_name}")
-                raise
-            except Exception as e:
-                LOGGER(__name__).error(f"Fast download core error: {e}")
-                raise
-            finally:
-                # Explicit cleanup of any potential downloader references
-                # FastTelethon download_file creates a ParallelTransferrer internally
-                pass
-
+            with open(file, 'wb') as f:
+                await fast_download(
+                    client=client,
+                    location=media_location,
+                    out=f,
+                    progress_callback=ram_callback,
+                    file_size=file_size,
+                    connection_count=connection_count
+                )
             end_ram = get_ram_usage_mb()
             LOGGER(__name__).info(f"[RAM] DOWNLOAD COMPLETE: {file_name} - RAM before GC: {end_ram:.1f}MB")
             
-            # Explicitly clear variables that might hold media references
-            media_location = None
-            f = None
             gc.collect()
             after_gc_ram = get_ram_usage_mb()
             ram_released = end_ram - after_gc_ram
@@ -178,7 +158,6 @@ async def download_media_fast(
                 f"FastTelethon bypassed for {file_name}: media_location={media_location is not None}, "
                 f"file_size={file_size} - falling back to standard download"
             )
-            # Use user client for standard download too
             return await client.download_media(message, file=file, progress_callback=progress_callback)
         
     except Exception as e:
@@ -186,7 +165,6 @@ async def download_media_fast(
         if 'paidmedia' in error_str or 'paid' in error_str:
             raise ValueError("Paid media (premium content) cannot be downloaded - the content owner requires payment to access this media")
         LOGGER(__name__).error(f"FastTelethon download failed, falling back to standard: {e}")
-        # Use user client for standard download too
         return await client.download_media(message, file=file, progress_callback=progress_callback)
 
 async def upload_media_fast(
@@ -216,19 +194,12 @@ async def upload_media_fast(
         ram_callback = create_ram_logging_callback(progress_callback, file_size, "UPLOAD", file_name)
         
         file_handle = open(file_path, 'rb')
-        # Add overall timeout for upload
-        result = await asyncio.wait_for(
-            fast_upload(
-                client=client,
-                file=file_handle,
-                progress_callback=ram_callback,
-                connection_count=connection_count
-            ),
-            timeout=3600
+        result = await fast_upload(
+            client=client,
+            file=file_handle,
+            progress_callback=ram_callback,
+            connection_count=connection_count
         )
-        
-        file_handle.close()
-        file_handle = None
         
         end_ram = get_ram_usage_mb()
         LOGGER(__name__).info(f"[RAM] UPLOAD COMPLETE: {file_name} - RAM before GC: {end_ram:.1f}MB")
@@ -245,7 +216,6 @@ async def upload_media_fast(
             except:
                 pass
         
-        result = None
         before_gc = get_ram_usage_mb()
         gc.collect()
         after_gc = get_ram_usage_mb()
@@ -260,16 +230,16 @@ def get_connection_count_for_size(file_size: int, max_count: int = CONNECTIONS_P
     Larger files benefit from more connections, while smaller files
     don't need as many.
     """
-    if file_size >= 8 * 1024 * 1024:
+    if file_size >= 10 * 1024 * 1024:
         return max_count
     elif file_size >= 1 * 1024 * 1024:
-        return min(4, max_count)
+        return min(12, max_count)
     elif file_size >= 100 * 1024:
-        return min(4, max_count)
+        return min(8, max_count)
     elif file_size >= 10 * 1024:
-        return min(4, max_count)
+        return min(6, max_count)
     else:
-        return min(2, max_count)
+        return min(4, max_count)
 
 
 def _optimized_connection_count_upload(file_size, max_count=MAX_UPLOAD_CONNECTIONS, full_size=100*1024*1024):
