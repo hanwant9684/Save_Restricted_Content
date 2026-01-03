@@ -50,25 +50,29 @@ class DownloadSender:
     async def next(self) -> Optional[bytes]:
         if not self.remaining:
             return None
-        max_retries = 3
+        max_retries = 5
         for attempt in range(max_retries):
             try:
-                result = await self.client._call(self.sender, self.request)
+                # Add 30s timeout per part request to prevent hanging
+                result = await asyncio.wait_for(
+                    self.client._call(self.sender, self.request),
+                    timeout=30.0
+                )
                 self.remaining -= 1
                 self.request.offset += self.stride
                 return result.bytes
-            except Exception as e:
+            except (asyncio.TimeoutError, Exception) as e:
                 error_str = str(e).lower()
+                # Exponential backoff for retries
+                wait_time = min(2 ** attempt + 1, 30)
                 if 'flood' in error_str or '420' in str(type(e).__name__):
                     import re
                     wait_match = re.search(r'(\d+)', str(e))
-                    wait_time = int(wait_match.group(1)) if wait_match else 5
-                    wait_time = min(wait_time, 30)
-                    log.warning(f"FLOOD_WAIT detected, waiting {wait_time}s (attempt {attempt+1}/{max_retries})")
-                    await asyncio.sleep(wait_time)
-                    if attempt == max_retries - 1:
-                        raise
-                else:
+                    wait_time = int(wait_match.group(1)) if wait_match else wait_time
+                
+                log.warning(f"Connection issue or Flood ({e}), retrying in {wait_time}s (attempt {attempt+1}/{max_retries})")
+                await asyncio.sleep(wait_time)
+                if attempt == max_retries - 1:
                     raise
         return None
 
@@ -108,7 +112,11 @@ class UploadSender:
         self.request.bytes = data
         log.debug(f"Sending file part {self.request.file_part}/{self.part_count}"
                   f" with {len(data)} bytes")
-        await self.client._call(self.sender, self.request)
+        # Add 30s timeout for upload parts
+        await asyncio.wait_for(
+            self.client._call(self.sender, self.request),
+            timeout=30.0
+        )
         self.request.file_part += self.stride
 
     async def disconnect(self) -> None:
@@ -137,14 +145,27 @@ class ParallelTransferrer:
     async def _cleanup(self) -> None:
         if not self.senders:
             return
+        
+        senders_to_disconnect = self.senders
+        self.senders = None  # Clear immediately to prevent double-cleanup
+        
         try:
-            await asyncio.gather(*[sender.disconnect() for sender in self.senders], return_exceptions=True)
-        except Exception:
-            pass
-        self.senders = None
+            # Disconnect all MTProtoSenders in parallel
+            await asyncio.gather(
+                *[sender.disconnect() for sender in senders_to_disconnect], 
+                return_exceptions=True
+            )
+        except Exception as e:
+            log.debug(f"Error during parallel transfer cleanup: {e}")
+        finally:
+            # Ensure each sender's previous tasks are cancelled if any
+            for sender in senders_to_disconnect:
+                if isinstance(sender, UploadSender) and sender.previous:
+                    if not sender.previous.done():
+                        sender.previous.cancel()
 
     @staticmethod
-    def _get_connection_count(file_size: int, max_count: int = 20,
+    def _get_connection_count(file_size: int, max_count: int = 8,
                               full_size: int = 100 * 1024 * 1024) -> int:
         # Each user has their own session, so each transfer can use full connection capacity
         # This method is monkeypatched by helpers/transfer.py with size-aware logic
