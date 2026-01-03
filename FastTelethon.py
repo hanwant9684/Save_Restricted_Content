@@ -144,7 +144,7 @@ class ParallelTransferrer:
         self.senders = None
 
     @staticmethod
-    def _get_connection_count(file_size: int, max_count: int = 20,
+    def _get_connection_count(file_size: int, max_count: int = 8,
                               full_size: int = 100 * 1024 * 1024) -> int:
         # Each user has their own session, so each transfer can use full connection capacity
         # This method is monkeypatched by helpers/transfer.py with size-aware logic

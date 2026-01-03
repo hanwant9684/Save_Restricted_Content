@@ -92,9 +92,9 @@ class PyroConf:
     # Since each user has their own session, no global pooling is needed
     # Each transfer can use up to this many connections (default: 16)
     try:
-        CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
+        CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "8"))
     except ValueError:
-        CONNECTIONS_PER_TRANSFER = 16
+        CONNECTIONS_PER_TRANSFER = 8
     
     @staticmethod
     def get_app_url() -> str:
