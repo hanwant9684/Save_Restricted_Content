@@ -431,8 +431,10 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
         # Handle channel comments (linked chat)
         if (not chat_message or not chat_message.media) and "?" in post_url and "comment=" in post_url:
             try:
-                _, _, comment_id = parse_message_link(post_url)
-                result = await client_to_use(functions.messages.GetDiscussionMessageRequest(peer=chat_id, msg_id=message_id))
+                _, post_id, comment_id = parse_message_link(post_url)
+                # Use the post_id as the msg_id for GetDiscussionMessageRequest
+                msg_id_for_disc = post_id or message_id
+                result = await client_to_use(functions.messages.GetDiscussionMessageRequest(peer=chat_id, msg_id=msg_id_for_disc))
                 if result and result.messages:
                     disc_peer = result.messages[0].peer_id
                     chat_message = await client_to_use.get_messages(disc_peer, ids=comment_id)

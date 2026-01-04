@@ -113,20 +113,24 @@ def parse_message_link(link: str) -> Tuple[Optional[str], Optional[int], Optiona
     comment_match = re.search(r'\?comment=(\d+)', link)
     comment_id = int(comment_match.group(1)) if comment_match else None
     
+    # Clean the link of parameters for regular parsing
+    clean_link = link
     if '?' in link:
-        link = link.split('?')[0]
+        clean_link = link.split('?')[0]
     
-    parts = link.rstrip('/').split('/')
+    parts = clean_link.rstrip('/').split('/')
     
     try:
         if '/c/' in link:
             channel_id = int(parts[-3] if len(parts) >= 7 else parts[-2])
             message_id = int(parts[-1])
-            return f"-100{channel_id}", None, comment_id or message_id
+            # If it's a comment link, message_id is the original post ID
+            # return (chat_id, thread_id, comment_id or message_id)
+            return f"-100{channel_id}", message_id if comment_id else None, comment_id or message_id
         else:
             username = parts[-3] if len(parts) >= 6 else parts[-2]
             message_id = int(parts[-1])
-            return username, None, comment_id or message_id
+            return username, message_id if comment_id else None, comment_id or message_id
     except (ValueError, IndexError):
         pass
     
