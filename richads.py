@@ -29,6 +29,7 @@ class RichAdsManager:
     async def fetch_ad(self, language_code: str = "en", telegram_id: str = None) -> Optional[List[Dict[str, Any]]]:
         """Fetch ad from RichAds API"""
         if not self.is_enabled():
+            LOGGER(__name__).warning(f"RichAds: Skipping fetch - Publisher ID not configured for user {telegram_id}")
             return None
             
         payload = {
@@ -48,16 +49,19 @@ class RichAdsManager:
                     if response.status == 200:
                         ads = await response.json()
                         if ads and len(ads) > 0:
-                            LOGGER(__name__).debug(f"RichAds: Got {len(ads)} ad(s) for user {telegram_id}")
+                            LOGGER(__name__).info(f"💰 RichAds: Ad delivered successfully | User: {telegram_id} | Ad count: {len(ads)}")
                             return ads
-                        LOGGER(__name__).debug(f"RichAds: No ads available for user {telegram_id}")
+                        LOGGER(__name__).warning(f"⚠️ RichAds: No ads available (Inventory empty) | User: {telegram_id}")
                         return None
                     else:
                         response_text = await response.text()
-                        LOGGER(__name__).warning(f"RichAds error {response.status}: {response_text[:100]}")
+                        LOGGER(__name__).error(f"❌ RichAds: API Error {response.status} | User: {telegram_id} | Response: {response_text[:100]}")
                         return None
+        except asyncio.TimeoutError:
+            LOGGER(__name__).error(f"⏱️ RichAds: Request timed out | User: {telegram_id}")
+            return None
         except Exception as e:
-            LOGGER(__name__).warning(f"RichAds fetch error: {str(e)[:100]}")
+            LOGGER(__name__).error(f"❌ RichAds: Fetch error | User: {telegram_id} | Error: {str(e)[:100]}")
             return None
     
     async def notify_impression(self, notification_url: str) -> bool:

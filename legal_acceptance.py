@@ -122,15 +122,18 @@ async def show_legal_acceptance(event, bot=None):
         await event.respond(summary, buttons=markup.to_telethon(), link_preview=False)
         LOGGER(__name__).info(f"Shown legal acceptance screen to user {event.sender_id}")
         
-        # Force RichAd below legal acceptance for all users
+        # Wait a moment to prevent conflicts with buttons and ensure they are visible
+        await asyncio.sleep(1.5)
+        
+        # Show ad below legal acceptance for all users as a separate message
         if bot:
             try:
+                from richads import richads
                 sender = await event.get_sender()
                 lang_code = getattr(sender, 'lang_code', 'en') or 'en'
-                from richads import richads
                 await richads.send_ad_to_user(bot, event.sender_id, language_code=lang_code)
             except Exception as ad_error:
-                LOGGER(__name__).warning(f"Failed to force RichAd after legal acceptance: {ad_error}")
+                LOGGER(__name__).warning(f"Failed to send ad after legal acceptance: {ad_error}")
         
     except Exception as e:
         LOGGER(__name__).error(f"Error showing legal acceptance: {e}")

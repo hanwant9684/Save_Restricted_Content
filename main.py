@@ -171,19 +171,7 @@ async def start(event):
     if not db.check_legal_acceptance(event.sender_id):
         LOGGER(__name__).info(f"User {event.sender_id} needs to accept legal terms")
         
-        # Show ad even before legal terms if possible
-        sender = await event.get_sender()
-        lang_code = getattr(sender, 'lang_code', 'en') or 'en'
-        user_type = db.get_user_type(event.sender_id)
-        is_premium = user_type == 'paid'
-        is_admin = db.is_admin(event.sender_id)
-        
-        # We show the ad first, which is a separate message
-        await ad_manager.send_ad_with_fallback(bot, event.sender_id, event.chat_id, lang_code, is_premium=is_premium, is_admin=is_admin, force=True)
-        
-        # Wait a tiny bit to ensure message order in some clients, though usually not needed
-        await asyncio.sleep(1)
-        
+        # Show legal terms first, which handles the ad display itself
         await show_legal_acceptance(event, bot)
         return
     
@@ -218,6 +206,7 @@ async def start(event):
     is_admin = db.is_admin(event.sender_id)
 
     # Show ad forcefully for ALL users on /start
+    # Note: If user hasn't accepted legal terms, this is handled in the if block above via show_legal_acceptance
     await richads.send_ad_to_user(bot, event.sender_id, language_code=lang_code)
 
     welcome_text = (
