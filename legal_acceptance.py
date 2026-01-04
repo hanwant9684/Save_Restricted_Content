@@ -3,6 +3,7 @@
 # Legal acceptance handler for Terms & Conditions and Privacy Policy
 
 import os
+import asyncio
 from functools import wraps
 from telethon_helpers import InlineKeyboardButton, InlineKeyboardMarkup
 from logger import LOGGER
