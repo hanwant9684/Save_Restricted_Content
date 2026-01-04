@@ -111,7 +111,6 @@ class DownloadManager:
     async def _execute_download(self, user_id: int, download_coro, message):
         import gc
         try:
-            from memory_monitor import memory_monitor
             from helpers.session_manager import session_manager
             
             if user_id in session_manager.last_activity:
@@ -119,15 +118,12 @@ class DownloadManager:
                 session_manager.last_activity[user_id] = time()
                 LOGGER(__name__).debug(f"Updated last_activity for user {user_id} at download start")
             
-            memory_monitor.log_memory_snapshot("Download Started", f"User {user_id} | Active: {len(self.active_downloads)}", silent=True)
-            
             try:
                 await download_coro
             except asyncio.CancelledError:
                 LOGGER(__name__).info(f"Download cancelled for user {user_id}")
                 raise
             
-            memory_monitor.log_memory_snapshot("Download Completed", f"User {user_id} | Active: {len(self.active_downloads)}", silent=True)
         except asyncio.CancelledError:
             LOGGER(__name__).info(f"Download task cancelled for user {user_id}")
             try:
@@ -149,19 +145,10 @@ class DownloadManager:
             
             try:
                 from helpers.session_manager import session_manager
-                from helpers.transfer import get_ram_usage_mb
                 
-                before_cleanup = get_ram_usage_mb()
                 await session_manager.remove_session(user_id)
                 
                 gc.collect()
-                after_cleanup = get_ram_usage_mb()
-                ram_released = before_cleanup - after_cleanup
-                
-                LOGGER(__name__).info(
-                    f"[RAM] SESSION CLEANUP: User {user_id} - "
-                    f"RAM after cleanup: {after_cleanup:.1f}MB (released: {ram_released:.1f}MB)"
-                )
             except Exception as e:
                 LOGGER(__name__).debug(f"Could not cleanup session after download: {e}")
                 gc.collect()

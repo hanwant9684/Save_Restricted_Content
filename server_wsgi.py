@@ -294,14 +294,15 @@ def application(environ, start_response):
         
         elif path == '/memory-debug':
             try:
-                from memory_monitor import memory_monitor
                 import json
                 from datetime import datetime
                 
-                # Get current memory state and log it to file
-                mem_data = memory_monitor.get_memory_state_for_endpoint()
+                # Mock response since memory monitor is removed
+                mem_data = {
+                    "status": "Memory monitoring is disabled",
+                    "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
                 
-                # Format as pretty JSON
                 status = '200 OK'
                 body = json.dumps(mem_data, indent=2).encode('utf-8')
                 headers = [('Content-Type', 'application/json; charset=utf-8')] + headers_common
@@ -1247,7 +1248,6 @@ async def periodic_gc_task():
     """Periodic garbage collection for memory-constrained environments"""
     import gc
     import asyncio
-    from memory_monitor import memory_monitor
     
     while True:
         try:
@@ -1256,7 +1256,6 @@ async def periodic_gc_task():
             if collected > 0:
                 from logger import LOGGER
                 LOGGER(__name__).debug(f"Garbage collection freed {collected} objects")
-                memory_monitor.log_memory_snapshot("Garbage Collection", f"Freed {collected} objects", silent=True)
         except asyncio.CancelledError:
             from logger import LOGGER
             LOGGER(__name__).info("Periodic garbage collection task cancelled")
@@ -1310,8 +1309,6 @@ async def cleanup_watchdog_task():
                 LOGGER(__name__).error(f"Error in cache cleanup: {e}")
             
             # Log memory snapshot after cleanup
-            from memory_monitor import memory_monitor
-            memory_monitor.log_memory_snapshot("Cleanup Watchdog", "After cleanup sweep", silent=True)
             
         except asyncio.CancelledError:
             from logger import LOGGER
@@ -1375,8 +1372,6 @@ def run_bot():
             background_tasks.append(asyncio.create_task(cleanup_watchdog_task()))
             main.LOGGER(__name__).info("Started cleanup watchdog task (removes expired ad sessions every 5 min)")
             
-            from memory_monitor import memory_monitor
-            background_tasks.append(asyncio.create_task(memory_monitor.periodic_monitor(interval=300)))
             main.LOGGER(__name__).info("Started periodic memory monitoring (5-minute intervals)")
             
             # Start download manager
@@ -1384,7 +1379,6 @@ def run_bot():
             await download_manager.start_processor()
             main.LOGGER(__name__).info("Download manager initialized")
             
-            memory_monitor.log_memory_snapshot("Bot Startup", "Initial state after bot start")
             
             # Cloud backup tasks (GitHub backups every 10 minutes)
             try:

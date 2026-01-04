@@ -2,8 +2,8 @@
 # Channel: https://t.me/Wolfy004
 
 import os
-import psutil
 import asyncio
+import sys
 from time import time
 from attribution import verify_attribution, get_channel_link, get_creator_username
 
@@ -52,7 +52,6 @@ from database_sqlite import db
 from phone_auth import PhoneAuthHandler
 from ad_monetization import ad_monetization, PREMIUM_DOWNLOADS
 from access_control import admin_only, paid_or_admin_only, check_download_limit, register_user, check_user_session, get_user_client, force_subscribe
-from memory_monitor import memory_monitor
 from admin_commands import (
     add_admin_command,
     remove_admin_command,
@@ -534,7 +533,6 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
             # Set expected path BEFORE download - ensures cleanup works even if timeout during download
             media_path = download_path
 
-            memory_monitor.log_memory_snapshot("Download Start", f"User {event.sender_id}: {filename}", silent=True)
             
             async def process_single_file():
                 nonlocal media_path
@@ -547,7 +545,6 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                 )
                 media_path = result_path  # Update with actual result
 
-                memory_monitor.log_memory_snapshot("Download Complete", f"User {event.sender_id}: {filename}", silent=True)
                 LOGGER(__name__).debug(f"Downloaded media: {media_path}")
                 
                 # RAM OPTIMIZATION: Release download buffers before upload starts
@@ -1167,7 +1164,6 @@ async def handle_any_message(event):
 @register_user
 async def stats(event):
     currentTime = get_readable_time(int(time() - PyroConf.BOT_START_TIME))
-    process = psutil.Process(os.getpid())
     
     bot_memory_mb = round(process.memory_info()[0] / 1024**2)
     cpu_percent = process.cpu_percent(interval=0.1)
