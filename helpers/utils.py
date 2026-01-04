@@ -651,8 +651,6 @@ async def send_media(
     if not await fileSizeLimit(file_size, message, "upload"):
         return False
 
-    from memory_monitor import memory_monitor
-    memory_monitor.log_memory_snapshot("Upload Start", f"User {user_id or 'unknown'}: {os.path.basename(media_path)} ({media_type})", silent=True)
     
     progress_args = progressArgs("📤 Uploading", progress_message, start_time)
     LOGGER(__name__).debug(f"Uploading media: {media_path} ({media_type})")
@@ -689,7 +687,6 @@ async def send_media(
         if user_id and sent_message:
             await forward_to_dump_channel(bot, sent_message, user_id, caption, source_url)
         
-        memory_monitor.log_memory_snapshot("Upload Complete", f"User {user_id or 'unknown'}: {os.path.basename(media_path)} (photo)", silent=True)
         return True
     elif media_type == "video":
         # Get video duration and dimensions
@@ -757,7 +754,6 @@ async def send_media(
         if user_id and sent_message:
             await forward_to_dump_channel(bot, sent_message, user_id, caption, source_url)
         
-        memory_monitor.log_memory_snapshot("Upload Complete", f"User {user_id or 'unknown'}: {os.path.basename(media_path)} (video)", silent=True)
         return True
     elif media_type == "audio":
         duration, artist, title = await get_media_info(media_path)
@@ -805,7 +801,6 @@ async def send_media(
         if user_id and sent_message:
             await forward_to_dump_channel(bot, sent_message, user_id, caption, source_url)
         
-        memory_monitor.log_memory_snapshot("Upload Complete", f"User {user_id or 'unknown'}: {os.path.basename(media_path)} (audio)", silent=True)
         return True
     elif media_type == "document":
         from helpers.transfer import upload_media_fast
@@ -839,7 +834,6 @@ async def send_media(
         if user_id and sent_message:
             await forward_to_dump_channel(bot, sent_message, user_id, caption, source_url)
         
-        memory_monitor.log_memory_snapshot("Upload Complete", f"User {user_id or 'unknown'}: {os.path.basename(media_path)} (document)", silent=True)
         return True
 
 
@@ -944,10 +938,8 @@ async def processMediaGroup(chat_message, bot, message, user_id=None, user_clien
     Returns:
         int: Number of files successfully downloaded and sent (0 if failed)
     """
-    from memory_monitor import memory_monitor
     
     # Log memory at start of media group processing
-    memory_monitor.log_memory_snapshot("MediaGroup Start", f"User {user_id or 'unknown'}: Starting media group processing", silent=True)
     
     # Use user_client to fetch messages from private/public channels
     # Fall back to bot if user_client is not provided (backward compatibility)
@@ -1141,7 +1133,6 @@ async def processMediaGroup(chat_message, bot, message, user_id=None, user_clien
     await progress_message.delete()
     
     # Log memory at end of media group processing
-    memory_monitor.log_memory_snapshot("MediaGroup Complete", f"User {user_id or 'unknown'}: {files_sent_count}/{total_files} files processed", silent=True)
     
     # Force final garbage collection after media group
     gc.collect()

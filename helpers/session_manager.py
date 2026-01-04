@@ -78,13 +78,10 @@ class SessionManager:
                     oldest_idle_user = evictable_sessions[0]
                     oldest_client = self.active_sessions.pop(oldest_idle_user)
                     try:
-                        from memory_monitor import memory_monitor
-                        memory_monitor.track_session_cleanup(oldest_idle_user)
                         await oldest_client.disconnect()
                         # Clear activity timestamp for evicted session
                         self.last_activity.pop(oldest_idle_user, None)
                         LOGGER(__name__).info(f"Disconnected oldest idle session: user {oldest_idle_user} (no active downloads)")
-                        memory_monitor.log_memory_snapshot("Session Disconnected", f"Freed idle session for user {oldest_idle_user}", silent=True)
                     except Exception as e:
                         LOGGER(__name__).error(f"Error disconnecting session {oldest_idle_user}: {e}")
                 else:
@@ -97,10 +94,6 @@ class SessionManager:
             
             # Create new session
             try:
-                from memory_monitor import memory_monitor
-                
-                memory_monitor.track_session_creation(user_id)
-                
                 # Create Telethon client with StringSession
                 client = TelegramClient(
                     StringSession(session_string),
@@ -126,8 +119,6 @@ class SessionManager:
                 self.last_activity[user_id] = time()
                 LOGGER(__name__).info(f"Created new session for user {user_id} ({len(self.active_sessions)}/{self.max_sessions})")
                 
-                memory_monitor.log_memory_snapshot("Session Created", f"User {user_id} - Total sessions: {len(self.active_sessions)}", silent=True)
-                
                 return (client, None)
                 
             except Exception as e:
@@ -139,13 +130,10 @@ class SessionManager:
         async with self._lock:
             if user_id in self.active_sessions:
                 try:
-                    from memory_monitor import memory_monitor
-                    memory_monitor.track_session_cleanup(user_id)
                     await self.active_sessions[user_id].disconnect()
                     del self.active_sessions[user_id]
                     self.last_activity.pop(user_id, None)
                     LOGGER(__name__).info(f"Removed session for user {user_id}")
-                    memory_monitor.log_memory_snapshot("Session Removed", f"User {user_id}", silent=True)
                 except Exception as e:
                     LOGGER(__name__).error(f"Error removing session {user_id}: {e}")
     
@@ -194,11 +182,9 @@ class SessionManager:
                         continue
                     
                     try:
-                        from memory_monitor import memory_monitor
                         idle_minutes = (current_time - self.last_activity[user_id]) / 60
                         LOGGER(__name__).info(f"Disconnecting idle session for user {user_id} (idle for {idle_minutes:.1f} minutes)")
                         
-                        memory_monitor.track_session_cleanup(user_id)
                         await self.active_sessions[user_id].disconnect()
                         del self.active_sessions[user_id]
                         del self.last_activity[user_id]
