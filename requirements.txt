@@ -21,3 +21,4 @@ orjson
 Telethon
 uvloop
 waitress
+psutil
