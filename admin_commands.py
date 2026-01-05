@@ -376,7 +376,7 @@ async def admin_stats_command(event, download_mgr=None):
             f"🆕 New Today: `{stats.get('today_new_users', 0)}`\n"
             f"🔐 Admins: `{stats.get('admin_count', 0)}`\n\n"
             "📈 **Download Activity:**\n"
-            f"📥 Today: `{stats.get('today_downloads', 0)}`\n"
+            f"📥 Today: `{stats.get('today_downloads', 0)}` (All users)\n"
             f"⚡ Active: `{active_downloads}`\n\n"
             "——————————————————————————\n\n"
             "⚙️ **Quick Admin Actions:**\n"

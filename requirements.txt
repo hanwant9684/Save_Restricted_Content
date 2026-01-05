@@ -13,3 +13,11 @@ orjson
 Telethon
 uvloop
 waitress
+aiohttp
+cryptg
+ffmpeg-python
+flask
+orjson
+Telethon
+uvloop
+waitress

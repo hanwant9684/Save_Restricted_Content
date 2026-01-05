@@ -45,7 +45,7 @@ class RichAdsManager:
         
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(RICHADS_API_URL, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                async with session.post(RICHADS_API_URL, json=payload, timeout=aiohttp.ClientTimeout(total=300)) as response:
                     if response.status == 200:
                         ads = await response.json()
                         if ads and len(ads) > 0:

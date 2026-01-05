@@ -280,7 +280,7 @@ async def help_command(event):
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "ℹ️ **Other Commands:**\n\n"
             "   `/myinfo` - View account details\n"
-            "   `/stats` - Bot statistics\n\n"
+            "   `/logs` - View bot logs\n\n"
             "💡 **Your Benefits:**\n"
             "   ✅ Unlimited downloads\n"
             "   ✅ Priority access\n"
@@ -323,7 +323,7 @@ async def help_command(event):
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "ℹ️ **Other Commands:**\n\n"
             "   `/myinfo` - View account details\n"
-            "   `/stats` - Bot statistics"
+            "   `/logs` - View bot logs"
         )
 
     markup = InlineKeyboardMarkup(
@@ -1176,30 +1176,6 @@ async def handle_any_message(event):
         if msg:  # Only reply if there's a message to send
             await event.respond(msg)
 
-@bot.on(events.NewMessage(pattern='/stats', incoming=True, func=lambda e: e.is_private))
-@register_user
-async def stats(event):
-    currentTime = get_readable_time(int(time() - PyroConf.BOT_START_TIME))
-    
-    bot_memory_mb = round(process.memory_info()[0] / 1024**2)
-    cpu_percent = process.cpu_percent(interval=0.1)
-
-    stats_text = (
-        "🤖 **BOT STATUS**\n"
-        "—————————————————————\n\n"
-        "✨ **Status:** Online & Running\n\n"
-        "📊 **System Metrics:**\n"
-        f"⏱️ Uptime: `{currentTime}`\n"
-        f"💾 Memory: `{bot_memory_mb} MiB`\n"
-        f"⚡ CPU: `{cpu_percent}%`\n\n"
-        "—————————————————————\n\n"
-        "💡 **Quick Access:**\n"
-        "• `/status` - Check downloads\n"
-        "• `/myinfo` - Your account\n"
-        "• `/help` - All commands"
-    )
-    await event.respond(stats_text)
-
 @bot.on(events.NewMessage(pattern='/logs', incoming=True, func=lambda e: e.is_private))
 @admin_only
 async def logs(event):
@@ -1299,6 +1275,18 @@ async def test_dump_channel(event):
 @bot.on(events.NewMessage(pattern='/adminstats', incoming=True, func=lambda e: e.is_private))
 async def admin_stats_handler(event):
     await admin_stats_command(event, download_mgr=download_manager)
+
+@bot.on(events.NewMessage(pattern='/createpromo', incoming=True, func=lambda e: e.is_private))
+async def create_promo_handler(event):
+    await create_promo_command(event)
+
+@bot.on(events.NewMessage(pattern='/listpromos', incoming=True, func=lambda e: e.is_private))
+async def list_promos_handler(event):
+    await list_promos_command(event)
+
+@bot.on(events.NewMessage(pattern='/deletepromo', incoming=True, func=lambda e: e.is_private))
+async def delete_promo_handler(event):
+    await delete_promo_command(event)
 
 @bot.on(events.NewMessage(pattern='/getpremium', incoming=True, func=lambda e: e.is_private))
 @register_user
