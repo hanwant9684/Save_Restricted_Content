@@ -109,45 +109,28 @@ def parse_message_link(link: str) -> Tuple[Optional[str], Optional[int], Optiona
     """
     link = link.strip()
     
-    # Remove query parameters
-    if '?' in link:
-        link = link.split('?')[0]
+    # Handle comment links
+    comment_match = re.search(r'\?comment=(\d+)', link)
+    comment_id = int(comment_match.group(1)) if comment_match else None
     
-    parts = link.rstrip('/').split('/')
+    # Clean the link of parameters for regular parsing
+    clean_link = link
+    if '?' in link:
+        clean_link = link.split('?')[0]
+    
+    parts = clean_link.rstrip('/').split('/')
     
     try:
-        # Format: https://t.me/c/CHANNEL_ID/MESSAGE_ID or /c/CHANNEL_ID/THREAD_ID/MESSAGE_ID
         if '/c/' in link:
-            if len(parts) >= 7:  # With thread (https://t.me/c/CHANNEL_ID/THREAD_ID/MESSAGE_ID)
-                channel_id = int(parts[-3])
-                thread_id = int(parts[-2])
-                message_id = int(parts[-1])
-                # Add -100 prefix for channels
-                return f"-100{channel_id}", thread_id, message_id
-            elif len(parts) >= 6:  # Without thread (https://t.me/c/CHANNEL_ID/MESSAGE_ID)
-                channel_id = int(parts[-2])
-                message_id = int(parts[-1])
-                return f"-100{channel_id}", None, message_id
-        
-        # Format: https://t.me/USERNAME/MESSAGE_ID or /USERNAME/THREAD_ID/MESSAGE_ID
+            channel_id = int(parts[-3] if len(parts) >= 7 else parts[-2])
+            message_id = int(parts[-1])
+            # If it's a comment link, message_id is the original post ID
+            # return (chat_id, thread_id, comment_id or message_id)
+            return f"-100{channel_id}", message_id if comment_id else None, comment_id or message_id
         else:
-            # Check if this is a threaded message by trying to parse the middle part as int
-            # If it fails, it's a simple username/message format
-            if len(parts) >= 6:  # Potentially with thread
-                try:
-                    username = parts[-3]
-                    thread_id = int(parts[-2])
-                    message_id = int(parts[-1])
-                    return username, thread_id, message_id
-                except ValueError:
-                    pass  # Fall through to simple format
-            
-            # Simple format: username/message_id
-            if len(parts) >= 4:  # Without thread
-                username = parts[-2]
-                message_id = int(parts[-1])
-                return username, None, message_id
-    
+            username = parts[-3] if len(parts) >= 6 else parts[-2]
+            message_id = int(parts[-1])
+            return username, message_id if comment_id else None, comment_id or message_id
     except (ValueError, IndexError):
         pass
     
