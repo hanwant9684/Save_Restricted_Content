@@ -1843,14 +1843,15 @@ if __name__ == "__main__":
             
             LOGGER(__name__).info("Bot Started!")
 
+            @bot.on(events.NewMessage(pattern='/applypromo', incoming=True, func=lambda e: e.is_private))
             @bot.on(events.NewMessage(pattern='/promo', incoming=True, func=lambda e: e.is_private))
             @register_user
             async def promo_handler(event):
-                """Handle /promo <code> command"""
+                """Handle /promo <code> or /applypromo <code> command"""
                 try:
                     args = get_command_args(event.text)
                     if len(args) < 1:
-                        await event.respond("**Usage:** `/promo <code>`")
+                        await event.respond("**Usage:** `/promo <code>` or `/applypromo <code>`")
                         return
                     
                     code = args[0].upper()
