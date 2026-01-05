@@ -22,3 +22,12 @@ Telethon
 uvloop
 waitress
 psutil
+aiohttp
+cryptg
+ffmpeg-python
+flask
+orjson
+psutil
+Telethon
+uvloop
+waitress

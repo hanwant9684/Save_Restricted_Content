@@ -1288,6 +1288,30 @@ async def list_promos_handler(event):
 async def delete_promo_handler(event):
     await delete_promo_command(event)
 
+@bot.on(events.NewMessage(pattern='/applypromo', incoming=True, func=lambda e: e.is_private))
+@register_user
+async def apply_promo_handler(event):
+    """Apply a promo code to get premium access"""
+    try:
+        command = parse_command(event.text)
+        if len(command) < 2:
+            await event.respond(
+                "**Usage:** `/applypromo <code>`\n\n"
+                "**Example:** `/applypromo PROMO123`"
+            )
+            return
+
+        code = command[1].strip().upper()
+        success, msg = promo_manager.validate_and_apply(code, event.sender_id)
+        await event.respond(msg)
+        
+        if success:
+            LOGGER(__name__).info(f"User {event.sender_id} applied promo code {code}")
+            
+    except Exception as e:
+        await event.respond(f"❌ **Error applying promo code:** {str(e)}")
+        LOGGER(__name__).error(f"Error in apply_promo_handler: {e}")
+
 @bot.on(events.NewMessage(pattern='/getpremium', incoming=True, func=lambda e: e.is_private))
 @register_user
 async def get_premium_command(event):
