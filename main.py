@@ -15,10 +15,10 @@ try:
 except ImportError:
     pass
 
-from telethon import TelegramClient, events, functions, types
+from telethon import TelegramClient, events
 from telethon.errors import PeerIdInvalidError, BadRequestError
 from telethon.sessions import StringSession
-from telethon_helpers import InlineKeyboardButton, InlineKeyboardMarkup, parse_command, get_command_args, parse_message_link
+from telethon_helpers import InlineKeyboardButton, InlineKeyboardMarkup, parse_command, get_command_args
 
 from helpers.utils import (
     processMediaGroup,
@@ -349,6 +349,10 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
     lang_code = getattr(sender, 'lang_code', 'en') or 'en'
     await richads.send_ad_to_user(bot_client, event.sender_id, language_code=lang_code)
 
+    # Cut off URL at '?' if present
+    if "?" in post_url:
+        post_url = post_url.split("?", 1)[0]
+
     try:
         LOGGER(__name__).debug(f"Attempting to parse URL: {post_url}")
         chat_id, message_id = getChatMsgID(post_url)
@@ -428,29 +432,9 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
 
         chat_message = await client_to_use.get_messages(chat_id, ids=message_id)
 
-        # Handle channel comments (linked chat)
-        if (not chat_message or not chat_message.media) and "?" in post_url and "comment=" in post_url:
-            try:
-                _, post_id, comment_id = parse_message_link(post_url)
-                # Use the post_id as the msg_id for GetDiscussionMessageRequest
-                msg_id_for_disc = post_id or message_id
-                result = await client_to_use(functions.messages.GetDiscussionMessageRequest(peer=chat_id, msg_id=msg_id_for_disc))
-                if result and result.messages:
-                    disc_peer = result.messages[0].peer_id
-                    chat_message = await client_to_use.get_messages(disc_peer, ids=comment_id)
-                    if chat_message:
-                        chat_id, message_id = disc_peer, comment_id
-                        LOGGER(__name__).info(f"Retrieved comment from discussion group {chat_id}")
-            except Exception as e:
-                LOGGER(__name__).error(f"Error resolving comment: {e}")
-
-        if not chat_message:
-            await event.respond(f"❌ **Message not found.**\n\nMessage ID `{message_id}` could not be retrieved from chat `{chat_id}`. Make sure the message still exists and you have access to it.")
-            return
-
         LOGGER(__name__).debug(f"Downloading media from URL: {post_url}")
 
-        if chat_message.document or chat_message.video or chat_message.audio or chat_message.photo:
+        if chat_message.document or chat_message.video or chat_message.audio:
             # Telethon uses .size instead of .file_size (Pyrogram compatibility)
             # Use message.file.size as universal way to get file size in Telethon
             file_size = chat_message.file.size if chat_message.file else 0
@@ -1870,6 +1854,15 @@ if __name__ == "__main__":
                     await event.respond(message)
                 except Exception as e:
                     await event.respond(f"❌ **Error:** {str(e)}")
+
+            # Register promo management commands for admins
+            from admin_commands import (
+                create_promo_command, list_promos_command, delete_promo_command
+            )
+            
+            bot.add_event_handler(create_promo_command, events.NewMessage(pattern='/createpromo'))
+            bot.add_event_handler(list_promos_command, events.NewMessage(pattern='/listpromos'))
+            bot.add_event_handler(delete_promo_command, events.NewMessage(pattern='/deletepromo'))
 
             await bot.run_until_disconnected()
         except KeyboardInterrupt:
