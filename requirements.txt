@@ -11,3 +11,4 @@ python-dotenv
 msgpack-python
 hiredis
 pydantic
+cryptg

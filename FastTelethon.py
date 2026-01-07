@@ -50,7 +50,7 @@ class DownloadSender:
     async def next(self) -> Optional[bytes]:
         if not self.remaining:
             return None
-        max_retries = 3
+        max_retries = 5
         for attempt in range(max_retries):
             try:
                 result = await self.client._call(self.sender, self.request)
@@ -63,11 +63,16 @@ class DownloadSender:
                     import re
                     wait_match = re.search(r'(\d+)', str(e))
                     wait_time = int(wait_match.group(1)) if wait_match else 5
-                    wait_time = min(wait_time, 30)
+                    # Slightly more aggressive wait for high performance
+                    wait_time = min(wait_time, 20)
                     log.warning(f"FLOOD_WAIT detected, waiting {wait_time}s (attempt {attempt+1}/{max_retries})")
                     await asyncio.sleep(wait_time)
                     if attempt == max_retries - 1:
                         raise
+                elif 'connection' in error_str or 'timeout' in error_str:
+                    # Retry on connection issues
+                    await asyncio.sleep(1)
+                    continue
                 else:
                     raise
         return None
@@ -106,10 +111,16 @@ class UploadSender:
 
     async def _next(self, data: bytes) -> None:
         self.request.bytes = data
-        log.debug(f"Sending file part {self.request.file_part}/{self.part_count}"
-                  f" with {len(data)} bytes")
+        # Removed debug logging to save CPU
+        # log.debug(f"Sending file part {self.request.file_part}/{self.part_count}"
+        #           f" with {len(data)} bytes")
         await self.client._call(self.sender, self.request)
         self.request.file_part += self.stride
+        # Suggest GC only on large chunks to keep memory clean without slowing down small writes
+        if len(data) >= 512 * 1024:
+            import gc
+            # Only collect generation 0 for speed
+            gc.collect(0)
 
     async def disconnect(self) -> None:
         if self.previous:
@@ -142,6 +153,9 @@ class ParallelTransferrer:
         except Exception:
             pass
         self.senders = None
+        # Suggest a shallow GC to clean up connection objects
+        import gc
+        gc.collect(0)
 
     @staticmethod
     def _get_connection_count(file_size: int, max_count: int = 16,
@@ -309,9 +323,9 @@ class ParallelTransferrer:
                         break
                     yield data
                     part += 1
-                    log.debug(f"Part {part} downloaded")
+                    # log.debug(f"Part {part} downloaded")
         finally:
-            log.debug("Parallel download finished, cleaning up connections")
+            # log.debug("Parallel download finished, cleaning up connections")
             await self._cleanup()
 
 

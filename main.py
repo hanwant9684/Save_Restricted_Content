@@ -570,13 +570,13 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                 )
                 media_path = result_path  # Update with actual result
 
-                LOGGER(__name__).debug(f"Downloaded media: {media_path}")
+                # LOGGER(__name__).debug(f"Downloaded media: {media_path}")
                 
                 # RAM OPTIMIZATION: Release download buffers before upload starts
                 # This ensures peak RAM usage is minimized by clearing download memory before allocating upload buffers
                 import gc
                 gc.collect()
-                LOGGER(__name__).debug(f"RAM released after download, before upload: {filename}")
+                # LOGGER(__name__).debug(f"RAM released after download, before upload: {filename}")
 
                 media_type = (
                     "photo"
