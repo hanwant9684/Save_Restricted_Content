@@ -83,13 +83,12 @@ async def download_media_fast(
             file_size = getattr(message.sticker, 'size', 0)
             media_location = message.sticker
         
-        # VPS Ultra-Speed Optimization: Use 16 parallel connections
-        # This will fully utilize the 1Gbps bandwidth we saw in speedtest
-        connection_count = 16 if file_size >= 100 * 1024 * 1024 else 16
+        # VPS Optimization: Use 16 parallel connections as requested
+        connection_count = 16
         
         LOGGER(__name__).info(
             f"Starting download: {os.path.basename(file)} "
-            f"({file_size/1024/1024:.1f}MB, {connection_count} connections - ULTRA SPEED)"
+            f"({file_size/1024/1024:.1f}MB, {connection_count} connections)"
         )
         
         if media_location and file_size > 0:

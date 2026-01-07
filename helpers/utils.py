@@ -449,9 +449,9 @@ class ProgressThrottle:
         time_diff = now - throttle['last_update_time']
         percentage_diff = percentage - throttle['last_percentage']
         
-        # Require minimum 5 seconds OR 10% progress
-        min_time = throttle['backoff_duration']
-        return time_diff >= min_time or percentage_diff >= 10
+        # Require minimum 2 seconds OR 5% progress
+        min_time = 2
+        return time_diff >= min_time or percentage_diff >= 5
     
     def get_current_speed(self, message_id, current, now):
         """

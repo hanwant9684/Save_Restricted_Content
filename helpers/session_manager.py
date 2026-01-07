@@ -18,7 +18,7 @@ class SessionManager:
     This prevents memory exhaustion from too many active user sessions
     """
     
-    def __init__(self, max_sessions: int = 5, idle_timeout_minutes: int = 30):
+    def __init__(self, max_sessions: int = 50, idle_timeout_minutes: int = 2):
         """
         Args:
             max_sessions: Maximum number of concurrent user sessions
@@ -244,6 +244,6 @@ IS_CONSTRAINED = bool(
     os.getenv('REPL_ID')
 )
 
-MAX_SESSIONS = 10 if IS_CONSTRAINED else 15
-IDLE_TIMEOUT_MINUTES = 2  # Reduced from 30 since smart timeout protects active downloads
+MAX_SESSIONS = 50
+IDLE_TIMEOUT_MINUTES = 2
 session_manager = SessionManager(max_sessions=MAX_SESSIONS, idle_timeout_minutes=IDLE_TIMEOUT_MINUTES)
