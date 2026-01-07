@@ -125,12 +125,11 @@ class PyroConf:
         FREE_INTRA_DELAY = 15
     
     # Connection Configuration for Transfers
-    # Since each user has their own session, no global pooling is needed
-    # Each transfer can use up to this many connections (default: 16)
+    # VPS has 1Gbps speed and 2GB RAM - we can go much higher
     try:
-        CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "8"))
+        CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "64"))
     except ValueError:
-        CONNECTIONS_PER_TRANSFER = 8
+        CONNECTIONS_PER_TRANSFER = 64
     
     @staticmethod
     def get_app_url() -> str:

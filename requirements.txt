@@ -40,3 +40,4 @@ psutil
 Telethon
 uvloop
 waitress
+python-dotenv
