@@ -160,7 +160,7 @@ def get_connection_count_for_size(file_size: int, max_count: int = CONNECTIONS_P
     if file_size >= 50 * 1024 * 1024:
         return max_count
     elif file_size >= 10 * 1024 * 1024:
-        return min(6, max_count)
+        return min(16, max_count)
     elif file_size >= 1 * 1024 * 1024:
         return min(4, max_count)
     elif file_size >= 10 * 1024:
