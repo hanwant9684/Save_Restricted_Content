@@ -12,3 +12,17 @@ msgpack-python
 hiredis
 pydantic
 cryptg
+aiohttp
+cryptg
+ffmpeg-python
+flask
+hiredis
+msgpack-python
+orjson
+psutil
+pydantic
+python-dotenv
+Telethon[cryptg]
+ujson
+uvloop
+waitress

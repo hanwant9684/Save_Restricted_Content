@@ -27,16 +27,10 @@ def cleanup_old_logs():
 cleanup_old_logs()
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,  # Reduced logging to WARNING to save resources
     format="[%(asctime)s - %(levelname)s] - %(funcName)s() - Line %(lineno)d: %(name)s - %(message)s",
     datefmt="%d-%b-%y %I:%M:%S %p",
     handlers=[
-        RotatingFileHandler(
-            "logs.txt",
-            mode="a",
-            maxBytes=10000000,  # 10MB per file (increased for VPS)
-            backupCount=5,  # Keep 5 backup files
-        ),
         logging.StreamHandler(),
     ],
 )
