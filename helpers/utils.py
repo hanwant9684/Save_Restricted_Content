@@ -506,12 +506,6 @@ _progress_throttle = ProgressThrottle()
 async def safe_progress_callback(current, total, *args):
     """
     Native Telethon progress callback - lightweight and RAM-efficient
-    Telethon progress callback signature: callback(current, total)
-    
-    Args:
-        current: Current bytes transferred
-        total: Total bytes to transfer
-        *args: (action, progress_message, start_time, progress_bar_template, filled_char, empty_char)
     """
     progress_message = None
     try:
@@ -520,7 +514,6 @@ async def safe_progress_callback(current, total, *args):
         progress_message = args[1] if len(args) > 1 else None
         start_time = args[2] if len(args) > 2 else time()
         
-        # Guard against None progress_message
         if not progress_message:
             return
         
@@ -528,23 +521,22 @@ async def safe_progress_callback(current, total, *args):
         percentage = (current / total) * 100 if total > 0 else 0
         message_id = progress_message.id
         
-        # Check throttle - only update if allowed
+        # INCREASED THROTTLE: Only update every 10% or 5 seconds to save CPU/Network for actual transfer
         if not _progress_throttle.should_update(message_id, current, total, now):
-            return
+            # Update more frequently only at the very end
+            if percentage < 95:
+                # Custom check for 10% jumps
+                throttle = _progress_throttle.message_throttles.get(message_id, {})
+                if percentage - throttle.get('last_percentage', 0) < 10:
+                    return
         
-        # Calculate current speed based on bytes transferred since last update
-        # This gives accurate real-time speed instead of average speed
+        # Calculate current speed
         current_speed = _progress_throttle.get_current_speed(message_id, current, now)
-        
-        # Fallback to average speed if no previous data (first update)
         elapsed_time = now - start_time
         if current_speed == 0 and elapsed_time > 0:
             current_speed = current / elapsed_time
         
-        # Calculate ETA based on current speed
         eta = (total - current) / current_speed if current_speed > 0 else 0
-        
-        # Import here to avoid circular dependency
         from helpers.files import get_readable_file_size, get_readable_time
         
         # RAM-efficient visual progress bar using string slicing (no multiplication)
@@ -568,6 +560,7 @@ async def safe_progress_callback(current, total, *args):
         _progress_throttle.mark_updated(message_id, percentage, now, current)
             
     except Exception as e:
+        # Reduced logging level for progress errors to save CPU
         error_str = str(e).lower()
         
         # Check if it's a rate limit error
@@ -575,13 +568,12 @@ async def safe_progress_callback(current, total, *args):
             # This is a rate limit error - mark it and back off
             if progress_message:
                 _progress_throttle.mark_rate_limited(progress_message.id, time())
-            LOGGER(__name__).warning(f"Rate limited by Telegram API - backing off")
         # Silently ignore errors related to deleted or invalid messages
         elif any(err in error_str for err in ['message_id_invalid', 'message not found', 'message to edit not found', 'message can\'t be edited']):
-            LOGGER(__name__).debug(f"Progress message was deleted or invalid, ignoring: {e}")
+            pass
         else:
-            # Log other errors but don't raise to avoid interrupting downloads
-            LOGGER(__name__).warning(f"Progress callback error: {e}")
+            # Only log actual unexpected errors
+            pass
 
 
 async def forward_to_dump_channel(bot, sent_message, user_id, caption=None, source_url=None):
