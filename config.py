@@ -2,7 +2,43 @@
 # Channel: https://t.me/Wolfy004
 
 import os
+import re
 from time import time
+from pathlib import Path
+from dotenv import load_dotenv
+
+def safe_load_dotenv():
+    """
+    Specifically designed for VPS environments where .env files might
+    be created with shell redirection artifacts (cat <<EOF).
+    """
+    env_path = Path(__file__).parent / '.env'
+    if not env_path.exists():
+        # Fallback to current working directory
+        env_path = Path.cwd() / '.env'
+    
+    if env_path.exists():
+        content = env_path.read_text()
+        
+        # If file contains 'cat <<EOF' or 'EOF', clean it up
+        if 'EOF' in content or 'cat <<' in content:
+            # Extract only valid KEY=VALUE lines
+            valid_lines = []
+            for line in content.splitlines():
+                line = line.strip()
+                if '=' in line and not line.startswith(('cat ', 'EOF', '<<')):
+                    # Remove potential trailing shell artifacts
+                    line = re.sub(r'\s*#.*$', '', line) # Remove comments
+                    valid_lines.append(line)
+            
+            # Rewrite cleaned content
+            env_path.write_text('\n'.join(valid_lines) + '\n')
+        
+        # Load the (now cleaned) file
+        load_dotenv(dotenv_path=env_path, override=True)
+
+# Execute safe load before class definition
+safe_load_dotenv()
 
 class PyroConf:
     try:
