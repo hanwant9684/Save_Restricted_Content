@@ -7,7 +7,7 @@ Since each user has their own Telegram session, no global connection
 pooling is needed - each session can use full connection capacity.
 
 CONFIGURATION (Environment Variables):
-- CONNECTIONS_PER_TRANSFER: Connections per download/upload (default: 64)
+- CONNECTIONS_PER_TRANSFER: Connections per download/upload (default: 16)
 """
 import os
 import asyncio
@@ -20,7 +20,7 @@ from telethon.tl.types import Message, Document, TypeMessageMedia, InputPhotoFil
 from logger import LOGGER
 from FastTelethon import download_file as fast_download, upload_file as fast_upload, ParallelTransferrer
 
-CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "64"))
+CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
 
 IS_CONSTRAINED = False
 
@@ -83,9 +83,9 @@ async def download_media_fast(
             file_size = getattr(message.sticker, 'size', 0)
             media_location = message.sticker
         
-        # VPS Ultra-Speed Optimization: Use 64 parallel connections
+        # VPS Ultra-Speed Optimization: Use 16 parallel connections
         # This will fully utilize the 1Gbps bandwidth we saw in speedtest
-        connection_count = 64 if file_size >= 100 * 1024 * 1024 else 32
+        connection_count = 16 if file_size >= 100 * 1024 * 1024 else 32
         
         LOGGER(__name__).info(
             f"Starting download: {os.path.basename(file)} "
@@ -160,7 +160,7 @@ def get_connection_count_for_size(file_size: int, max_count: int = CONNECTIONS_P
     if file_size >= 50 * 1024 * 1024:
         return max_count
     elif file_size >= 10 * 1024 * 1024:
-        return min(16, max_count)
+        return min(6, max_count)
     elif file_size >= 1 * 1024 * 1024:
         return min(4, max_count)
     elif file_size >= 10 * 1024:
