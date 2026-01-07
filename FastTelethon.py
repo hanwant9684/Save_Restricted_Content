@@ -316,7 +316,7 @@ class ParallelTransferrer:
 parallel_transfer_locks: DefaultDict[int, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
 
-def stream_file(file_to_stream: BinaryIO, chunk_size=1024):
+def stream_file(file_to_stream: BinaryIO, chunk_size=512*1024):
     while True:
         data_read = file_to_stream.read(chunk_size)
         if not data_read:
