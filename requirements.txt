@@ -31,3 +31,12 @@ psutil
 Telethon
 uvloop
 waitress
+aiohttp
+cryptg
+ffmpeg-python
+flask
+orjson
+psutil
+Telethon
+uvloop
+waitress

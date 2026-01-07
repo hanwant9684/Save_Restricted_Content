@@ -872,6 +872,11 @@ async def download_range(event):
             
             try:
                 chat_msg = await client_to_use.get_messages(start_chat, ids=msg_id)
+                
+                # PERMANENT FLOODWAIT FIX: Add delay between each message fetch in batch
+                # Free users: 1.5s, Premium: 0.8s (Safe levels for Telegram)
+                await asyncio.sleep(0.8 if is_premium else 1.5)
+                
                 if not chat_msg:
                     LOGGER(__name__).debug(f"Batch: msg {msg_id} not found")
                     skipped += 1
