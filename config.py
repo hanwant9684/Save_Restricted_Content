@@ -42,8 +42,7 @@ safe_load_dotenv()
 
 class PyroConf:
     try:
-        val = os.getenv("API_ID", "0")
-        API_ID = int(val) if val and val.strip() else 0
+        API_ID = int(os.getenv("API_ID", "0"))
     except ValueError:
         API_ID = 0
 

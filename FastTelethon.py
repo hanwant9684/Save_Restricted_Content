@@ -153,9 +153,6 @@ class ParallelTransferrer:
         except Exception:
             pass
         self.senders = None
-        # Suggest a shallow GC to clean up connection objects
-        import gc
-        gc.collect(0)
 
     @staticmethod
     def _get_connection_count(file_size: int, max_count: int = 16,
@@ -323,9 +320,9 @@ class ParallelTransferrer:
                         break
                     yield data
                     part += 1
-                    # log.debug(f"Part {part} downloaded")
+                    log.debug(f"Part {part} downloaded")
         finally:
-            # log.debug("Parallel download finished, cleaning up connections")
+            log.debug("Parallel download finished, cleaning up connections")
             await self._cleanup()
 
 
