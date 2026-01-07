@@ -20,7 +20,7 @@ from telethon.tl.types import Message, Document, TypeMessageMedia, InputPhotoFil
 from logger import LOGGER
 from FastTelethon import download_file as fast_download, upload_file as fast_upload, ParallelTransferrer
 
-CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "8"))
+CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
 
 IS_CONSTRAINED = False
 
@@ -83,11 +83,13 @@ async def download_media_fast(
             file_size = getattr(message.sticker, 'size', 0)
             media_location = message.sticker
         
-        connection_count = get_connection_count_for_size(file_size)
+        # VPS Ultra-Speed Optimization: Use 64 parallel connections
+        # This will fully utilize the 1Gbps bandwidth we saw in speedtest
+        connection_count = 64 if file_size >= 100 * 1024 * 1024 else 32
         
         LOGGER(__name__).info(
             f"Starting download: {os.path.basename(file)} "
-            f"({file_size/1024/1024:.1f}MB, {connection_count} connections)"
+            f"({file_size/1024/1024:.1f}MB, {connection_count} connections - ULTRA SPEED)"
         )
         
         if media_location and file_size > 0:
