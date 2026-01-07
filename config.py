@@ -101,12 +101,12 @@ class PyroConf:
     try:
         PREMIUM_DOWNLOAD_DELAY = int(os.getenv("PREMIUM_DOWNLOAD_DELAY", "5"))
     except ValueError:
-        PREMIUM_DOWNLOAD_DELAY = 5
+        PREMIUM_DOWNLOAD_DELAY = 2
     
     try:
         FREE_DOWNLOAD_DELAY = int(os.getenv("FREE_DOWNLOAD_DELAY", "15"))
     except ValueError:
-        FREE_DOWNLOAD_DELAY = 15
+        FREE_DOWNLOAD_DELAY = 4
     
     # Intra-Request Delay Times (in seconds)
     # Wait time BETWEEN items within a single request (media groups, batch downloads)
@@ -117,12 +117,12 @@ class PyroConf:
     try:
         PREMIUM_INTRA_DELAY = int(os.getenv("PREMIUM_INTRA_DELAY", "10"))
     except ValueError:
-        PREMIUM_INTRA_DELAY = 10
+        PREMIUM_INTRA_DELAY = 2
     
     try:
         FREE_INTRA_DELAY = int(os.getenv("FREE_INTRA_DELAY", "15"))
     except ValueError:
-        FREE_INTRA_DELAY = 15
+        FREE_INTRA_DELAY = 4
     
     # Connection Configuration for Transfers
     # VPS has 1Gbps speed and 2GB RAM - we can go much higher
