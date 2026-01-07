@@ -521,18 +521,14 @@ async def safe_progress_callback(current, total, *args):
         percentage = (current / total) * 100 if total > 0 else 0
         message_id = progress_message.id
         
-        # INCREASED THROTTLE: Only update every 20% or 10 seconds to save CPU/Network
+        # INCREASED THROTTLE: Only update every 10% or 5 seconds to save CPU/Network for actual transfer
         if not _progress_throttle.should_update(message_id, current, total, now):
             # Update more frequently only at the very end
             if percentage < 95:
-                # Custom check for 20% jumps
+                # Custom check for 10% jumps
                 throttle = _progress_throttle.message_throttles.get(message_id, {})
-                if percentage - throttle.get('last_percentage', 0) < 20:
+                if percentage - throttle.get('last_percentage', 0) < 10:
                     return
-        
-        # Check time threshold for non-percentage jumps
-        if now - _progress_throttle.message_throttles.get(message_id, {}).get('last_update_time', 0) < 10 and percentage < 95:
-             return
         
         # Calculate current speed
         current_speed = _progress_throttle.get_current_speed(message_id, current, now)
