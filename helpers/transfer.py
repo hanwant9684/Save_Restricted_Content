@@ -7,7 +7,7 @@ Since each user has their own Telegram session, no global connection
 pooling is needed - each session can use full connection capacity.
 
 CONFIGURATION (Environment Variables):
-- CONNECTIONS_PER_TRANSFER: Connections per download/upload (default: 16)
+- CONNECTIONS_PER_TRANSFER: Connections per download/upload (default: 64)
 """
 import os
 import asyncio
@@ -20,7 +20,7 @@ from telethon.tl.types import Message, Document, TypeMessageMedia, InputPhotoFil
 from logger import LOGGER
 from FastTelethon import download_file as fast_download, upload_file as fast_upload, ParallelTransferrer
 
-CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
+CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "64"))
 
 IS_CONSTRAINED = False
 
