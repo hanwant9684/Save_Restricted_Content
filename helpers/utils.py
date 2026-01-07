@@ -1001,6 +1001,12 @@ async def processMediaGroup(chat_message, bot, message, user_id=None, user_clien
         media_path = None
         file_start_time = time()
         
+        # PERMANENT FLOODWAIT FIX: Add delay between items in media group
+        if idx > 1:
+            delay = get_intra_request_delay(is_premium)
+            LOGGER(__name__).debug(f"MediaGroup: Waiting {delay}s before next file to avoid FloodWait")
+            await asyncio.sleep(delay)
+            
         try:
             # Update progress
             await progress_message.edit(
