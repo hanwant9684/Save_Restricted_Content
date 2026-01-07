@@ -101,12 +101,12 @@ class PyroConf:
     try:
         PREMIUM_DOWNLOAD_DELAY = int(os.getenv("PREMIUM_DOWNLOAD_DELAY", "5"))
     except ValueError:
-        PREMIUM_DOWNLOAD_DELAY = 2
+        PREMIUM_DOWNLOAD_DELAY = 5
     
     try:
         FREE_DOWNLOAD_DELAY = int(os.getenv("FREE_DOWNLOAD_DELAY", "15"))
     except ValueError:
-        FREE_DOWNLOAD_DELAY = 4
+        FREE_DOWNLOAD_DELAY = 15
     
     # Intra-Request Delay Times (in seconds)
     # Wait time BETWEEN items within a single request (media groups, batch downloads)
@@ -117,19 +117,19 @@ class PyroConf:
     try:
         PREMIUM_INTRA_DELAY = int(os.getenv("PREMIUM_INTRA_DELAY", "10"))
     except ValueError:
-        PREMIUM_INTRA_DELAY = 2
+        PREMIUM_INTRA_DELAY = 10
     
     try:
         FREE_INTRA_DELAY = int(os.getenv("FREE_INTRA_DELAY", "15"))
     except ValueError:
-        FREE_INTRA_DELAY = 4
+        FREE_INTRA_DELAY = 15
     
     # Connection Configuration for Transfers
     # VPS has 1Gbps speed and 2GB RAM - we can go much higher
     try:
-        CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "64"))
+        CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
     except ValueError:
-        CONNECTIONS_PER_TRANSFER = 64
+        CONNECTIONS_PER_TRANSFER = 16
     
     @staticmethod
     def get_app_url() -> str:
