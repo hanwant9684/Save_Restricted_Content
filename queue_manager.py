@@ -263,6 +263,6 @@ IS_CONSTRAINED = bool(
     os.getenv('REPL_ID')
 )
 
-MAX_CONCURRENT = 10 if IS_CONSTRAINED else 20
+MAX_CONCURRENT = 50 if not IS_CONSTRAINED else 10
 
 download_manager = DownloadManager(max_concurrent=MAX_CONCURRENT)

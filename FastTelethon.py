@@ -149,7 +149,7 @@ class ParallelTransferrer:
         # Each user has their own session, so each transfer can use full connection capacity
         # This method is monkeypatched by helpers/transfer.py with size-aware logic
         if file_size <= 0:
-            return max(16, max_count // 16)  # Safe fallback for unknown size
+            return 16  # Safe fallback for unknown size
         return max_count
 
     async def _init_download(self, connections: int, file: TypeLocation, part_count: int,
@@ -277,6 +277,8 @@ class ParallelTransferrer:
         return part_size, part_count, is_large
 
     async def upload(self, part: bytes) -> None:
+        if self.upload_ticker >= len(self.senders):
+            self.upload_ticker = 0
         await self.senders[self.upload_ticker].next(part)
         self.upload_ticker = (self.upload_ticker + 1) % len(self.senders)
 

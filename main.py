@@ -80,7 +80,16 @@ from cloud_backup import restore_latest_from_cloud, periodic_cloud_backup
 bot = TelegramClient(
     'media_bot',
     PyroConf.API_ID,
-    PyroConf.API_HASH
+    PyroConf.API_HASH,
+    device_model="VPS-HighPerf",
+    system_version="Linux-2Core",
+    app_version="5.0.0",
+    proxy=None,
+    connection_retries=10,
+    retry_delay=1,
+    auto_reconnect=True,
+    sequential_updates=False,
+    flood_sleep_threshold=60
 )
 
 # REMOVED: Global user client was bypassing SessionManager and wasting 30-100MB RAM

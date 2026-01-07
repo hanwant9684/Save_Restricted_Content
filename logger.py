@@ -33,9 +33,9 @@ logging.basicConfig(
     handlers=[
         RotatingFileHandler(
             "logs.txt",
-            mode="a",  # Append mode instead of w+ to preserve logs across restarts
-            maxBytes=1000000,  # 1MB per file (reduced from 5MB)
-            backupCount=2,  # Keep only 2 backup files (reduced from 10)
+            mode="a",
+            maxBytes=10000000,  # 10MB per file (increased for VPS)
+            backupCount=5,  # Keep 5 backup files
         ),
         logging.StreamHandler(),
     ],
