@@ -11,6 +11,7 @@ python-dotenv
 msgpack-python
 hiredis
 pydantic
+cryptg
 aiohttp
 cryptg
 ffmpeg-python
@@ -21,7 +22,7 @@ orjson
 psutil
 pydantic
 python-dotenv
-Telethon
+Telethon[cryptg]
 ujson
 uvloop
 waitress
