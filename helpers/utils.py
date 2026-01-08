@@ -702,8 +702,8 @@ async def send_media(
                 supports_streaming=True
             ))
         
-        # Generate thumbnail for the video
-        thumb_path = await generate_thumbnail(media_path, duration=duration)
+        # Thumbnail logic completely removed
+        thumb_path = None
         
         sent_message = None
         try:
