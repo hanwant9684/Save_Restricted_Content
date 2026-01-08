@@ -84,7 +84,7 @@ async def download_media_fast(
             media_location = message.sticker
         
         # Replit Optimization: Use 8 parallel connections to balance speed and RAM
-        connection_count = 8
+        connection_count = 16
         
         LOGGER(__name__).info(
             f"Starting download: {os.path.basename(file)} "
