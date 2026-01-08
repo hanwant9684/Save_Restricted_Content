@@ -449,10 +449,9 @@ class ProgressThrottle:
         time_diff = now - throttle['last_update_time']
         percentage_diff = percentage - throttle['last_percentage']
         
-        # Balanced Optimization: 5 seconds OR 15% progress
-        # This prevents the bot from spending too much CPU on message edits
-        # while keeping the progress bar smooth enough.
-        return time_diff >= 5 or percentage_diff >= 15
+        # Optimized for Replit: 4 seconds OR 10% progress
+        # This keeps CPU/RAM low while maintaining smooth progress
+        return time_diff >= 4 or percentage_diff >= 10
     
     def get_current_speed(self, message_id, current, now):
         """
@@ -553,8 +552,8 @@ async def safe_progress_callback(current, total, *args):
         readable_speed = get_readable_file_size(current_speed)
         readable_eta = get_readable_time(int(eta))
         
-        # Ultra-simplified: Percent • Speed • ETA (Zero Overhead)
-        progress_text = f"**{action}** `{pct}%` • `{readable_speed}/s` • `{readable_eta}`"
+        # Visual format with progress bar
+        progress_text = f"**{action}** `{pct}%`\n{progress_bar}\n{readable_current}/{readable_total} • {readable_speed}/s • {readable_eta}"
         
         # Try to update message
         await progress_message.edit(progress_text)
