@@ -83,7 +83,8 @@ async def download_media_fast(
             file_size = getattr(message.sticker, 'size', 0)
             media_location = message.sticker
         
-        # Replit Optimization: Use 8 parallel connections to balance speed and RAM
+        # Replit High-Performance Optimization: Use 16 parallel connections
+        # This utilizes the full CPU/Network capacity of the environment
         connection_count = 16
         
         LOGGER(__name__).info(

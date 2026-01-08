@@ -449,9 +449,10 @@ class ProgressThrottle:
         time_diff = now - throttle['last_update_time']
         percentage_diff = percentage - throttle['last_percentage']
         
-        # Optimized for Replit: 4 seconds OR 10% progress
-        # This keeps CPU/RAM low while maintaining smooth progress
-        return time_diff >= 4 or percentage_diff >= 10
+        # Balanced Optimization: 5 seconds OR 15% progress
+        # This prevents the bot from spending too much CPU on message edits
+        # while keeping the progress bar smooth enough.
+        return time_diff >= 5 or percentage_diff >= 15
     
     def get_current_speed(self, message_id, current, now):
         """
@@ -552,8 +553,8 @@ async def safe_progress_callback(current, total, *args):
         readable_speed = get_readable_file_size(current_speed)
         readable_eta = get_readable_time(int(eta))
         
-        # Visual format with progress bar
-        progress_text = f"**{action}** `{pct}%`\n{progress_bar}\n{readable_current}/{readable_total} • {readable_speed}/s • {readable_eta}"
+        # Ultra-simplified: Percent • Speed • ETA (Zero Overhead)
+        progress_text = f"**{action}** `{pct}%` • `{readable_speed}/s` • `{readable_eta}`"
         
         # Try to update message
         await progress_message.edit(progress_text)
@@ -699,8 +700,17 @@ async def send_media(
                 supports_streaming=True
             ))
         
-        # Thumbnail logic completely removed
-        thumb_path = None
+        # Generate thumbnail for video
+        thumb_path = await generate_thumbnail(media_path, duration=duration)
+        
+        # Fallback to custom thumbnail if generation failed
+        if not thumb_path and user_id:
+            from database_sqlite import db
+            user_data = db.get_user(user_id)
+            user_thumb = user_data.get('custom_thumbnail') if user_data else None
+            if user_thumb and os.path.exists(user_thumb):
+                thumb_path = user_thumb
+                LOGGER(__name__).info(f"Using custom thumbnail for user {user_id}: {thumb_path}")
         
         sent_message = None
         try:
