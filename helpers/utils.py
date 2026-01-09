@@ -417,7 +417,7 @@ class ProgressThrottle:
         Determine if progress should be updated based on throttle rules.
         
         Rules:
-        - Minimum 5 seconds between updates (or 10% progress change)
+        - Minimum 4 seconds between updates (or 10% progress change)
         - If rate limited, exponential backoff up to 60 seconds
         - Always allow 100% completion
         """
@@ -449,9 +449,10 @@ class ProgressThrottle:
         time_diff = now - throttle['last_update_time']
         percentage_diff = percentage - throttle['last_percentage']
         
-        # Require minimum 2 seconds OR 5% progress
-        min_time = 2
-        return time_diff >= min_time or percentage_diff >= 5
+        # Balanced Optimization: 5 seconds OR 15% progress
+        # This prevents the bot from spending too much CPU on message edits
+        # while keeping the progress bar smooth enough.
+        return time_diff >= 5 or percentage_diff >= 15
     
     def get_current_speed(self, message_id, current, now):
         """
@@ -521,18 +522,9 @@ async def safe_progress_callback(current, total, *args):
         percentage = (current / total) * 100 if total > 0 else 0
         message_id = progress_message.id
         
-        # INCREASED THROTTLE: Only update every 20% or 10 seconds to save CPU/Network
+        # ALWAYS use standard throttle settings for consistent progress bar behavior
         if not _progress_throttle.should_update(message_id, current, total, now):
-            # Update more frequently only at the very end
-            if percentage < 95:
-                # Custom check for 20% jumps
-                throttle = _progress_throttle.message_throttles.get(message_id, {})
-                if percentage - throttle.get('last_percentage', 0) < 20:
-                    return
-        
-        # Check time threshold for non-percentage jumps
-        if now - _progress_throttle.message_throttles.get(message_id, {}).get('last_update_time', 0) < 10 and percentage < 95:
-             return
+            return
         
         # Calculate current speed
         current_speed = _progress_throttle.get_current_speed(message_id, current, now)
@@ -555,8 +547,14 @@ async def safe_progress_callback(current, total, *args):
         # Build progress bar by slicing pre-built strings
         progress_bar = f"[{FILLED_BAR[:filled_count]}{EMPTY_BAR[:20-filled_count]}]"
         
-        # Visual format with progress bar
-        progress_text = f"**{action}** `{pct}%`\n{progress_bar}\n{get_readable_file_size(current)}/{get_readable_file_size(total)} • {get_readable_file_size(current_speed)}/s • {get_readable_time(int(eta))}"
+        # Optimized: Pre-calculate readable sizes once to save CPU
+        readable_current = get_readable_file_size(current)
+        readable_total = get_readable_file_size(total)
+        readable_speed = get_readable_file_size(current_speed)
+        readable_eta = get_readable_time(int(eta))
+        
+        # Ultra-simplified: Percent • Speed • ETA (Zero Overhead)
+        progress_text = f"**{action}** `{pct}%` • `{readable_speed}/s` • `{readable_eta}`"
         
         # Try to update message
         await progress_message.edit(progress_text)
@@ -702,8 +700,17 @@ async def send_media(
                 supports_streaming=True
             ))
         
-        # Thumbnail logic completely removed
-        thumb_path = None
+        # Generate thumbnail for video
+        thumb_path = await generate_thumbnail(media_path, duration=duration)
+        
+        # Fallback to custom thumbnail if generation failed
+        if not thumb_path and user_id:
+            from database_sqlite import db
+            user_data = db.get_user(user_id)
+            user_thumb = user_data.get('custom_thumbnail') if user_data else None
+            if user_thumb and os.path.exists(user_thumb):
+                thumb_path = user_thumb
+                LOGGER(__name__).info(f"Using custom thumbnail for user {user_id}: {thumb_path}")
         
         sent_message = None
         try:

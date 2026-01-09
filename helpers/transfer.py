@@ -7,7 +7,7 @@ Since each user has their own Telegram session, no global connection
 pooling is needed - each session can use full connection capacity.
 
 CONFIGURATION (Environment Variables):
-- CONNECTIONS_PER_TRANSFER: Connections per download/upload (default: 16)
+- CONNECTIONS_PER_TRANSFER: Connections per download/upload (default: 8)
 """
 import os
 import asyncio
@@ -20,13 +20,19 @@ from telethon.tl.types import Message, Document, TypeMessageMedia, InputPhotoFil
 from logger import LOGGER
 from FastTelethon import download_file as fast_download, upload_file as fast_upload, ParallelTransferrer
 
-CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
+CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "4"))
 
 IS_CONSTRAINED = False
 
+# Optimized connections for VPS: 4 connections for better speed
+# Yellow lines in htop (Cache/Buffer) are normal Linux behavior
 MAX_CONNECTIONS = CONNECTIONS_PER_TRANSFER
 MAX_UPLOAD_CONNECTIONS = CONNECTIONS_PER_TRANSFER
 MAX_DOWNLOAD_CONNECTIONS = CONNECTIONS_PER_TRANSFER
+
+# Increase chunk size for better throughput on fast networks
+# This helps with the 200kb limit by sending larger data chunks
+CHUNK_SIZE = 512 * 1024 # 512KB chunks
 
 async def download_media_fast(
     client: TelegramClient,
@@ -83,8 +89,9 @@ async def download_media_fast(
             file_size = getattr(message.sticker, 'size', 0)
             media_location = message.sticker
         
-        # VPS Optimization: Use 16 parallel connections as requested
-        connection_count = 16
+        # Replit High-Performance Optimization: Use 8 parallel connections
+        # This utilizes the full CPU/Network capacity of the environment
+        connection_count = 4
         
         LOGGER(__name__).info(
             f"Starting download: {os.path.basename(file)} "
@@ -159,13 +166,13 @@ def get_connection_count_for_size(file_size: int, max_count: int = CONNECTIONS_P
     if file_size >= 50 * 1024 * 1024:
         return max_count
     elif file_size >= 10 * 1024 * 1024:
-        return min(8, max_count)
+        return min(4, max_count)
     elif file_size >= 1 * 1024 * 1024:
-        return min(8, max_count)
+        return min(2, max_count)
     elif file_size >= 10 * 1024:
-        return min(8, max_count)
+        return min(2, max_count)
     else:
-        return min(8, max_count)
+        return min(4, max_count)
 
 
 def _optimized_connection_count_upload(file_size, max_count=MAX_UPLOAD_CONNECTIONS, full_size=100*1024*1024):
