@@ -73,13 +73,11 @@ async def cleanup_download_delayed(path: str, user_id: Optional[int], db) -> Non
         if os.path.isdir(folder) and not os.listdir(folder):
             os.rmdir(folder)
         
-        # Force garbage collection and clear internal caches
-        # Using gc.collect() followed by gc.freeze() for maximum RAM recovery
+        # Force garbage collection to release RAM (critical for 512MB limit)
         gc.collect()
-        gc.freeze() 
         
-        # Yield to event loop to allow OS/runtime to reclaim memory
-        await asyncio.sleep(1.0) # Increased sleep for better reclamation
+        # Yield to event loop to allow memory to be reclaimed
+        await asyncio.sleep(0.1)
         
         LOGGER(__name__).info(f"✅ Cleanup complete for {os.path.basename(path)} (RAM released)")
 
