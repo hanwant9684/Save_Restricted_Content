@@ -20,7 +20,7 @@ from telethon.tl.types import Message, Document, TypeMessageMedia, InputPhotoFil
 from logger import LOGGER
 from FastTelethon import download_file as fast_download, upload_file as fast_upload, ParallelTransferrer
 
-CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
+CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "8"))
 
 IS_CONSTRAINED = False
 
