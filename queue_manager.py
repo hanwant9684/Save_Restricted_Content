@@ -148,10 +148,13 @@ class DownloadManager:
                 
                 await session_manager.remove_session(user_id)
                 
+                # Use deep garbage collection after session removal
                 gc.collect()
+                gc.freeze()
             except Exception as e:
                 LOGGER(__name__).debug(f"Could not cleanup session after download: {e}")
                 gc.collect()
+                gc.freeze()
             
             LOGGER(__name__).info(f"Download completed for user {user_id}. Active: {len(self.active_downloads)}. Session+GC cleanup done.")
             
