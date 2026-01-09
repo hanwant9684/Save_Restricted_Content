@@ -20,13 +20,19 @@ from telethon.tl.types import Message, Document, TypeMessageMedia, InputPhotoFil
 from logger import LOGGER
 from FastTelethon import download_file as fast_download, upload_file as fast_upload, ParallelTransferrer
 
-CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "8"))
+CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
 
 IS_CONSTRAINED = False
 
+# Optimized connections for VPS: 16 connections for better speed
+# Yellow lines in htop (Cache/Buffer) are normal Linux behavior
 MAX_CONNECTIONS = CONNECTIONS_PER_TRANSFER
 MAX_UPLOAD_CONNECTIONS = CONNECTIONS_PER_TRANSFER
 MAX_DOWNLOAD_CONNECTIONS = CONNECTIONS_PER_TRANSFER
+
+# Increase chunk size for better throughput on fast networks
+# This helps with the 200kb limit by sending larger data chunks
+CHUNK_SIZE = 512 * 1024 # 512KB chunks
 
 async def download_media_fast(
     client: TelegramClient,
