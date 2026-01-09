@@ -1832,113 +1832,84 @@ if __name__ == "__main__":
         await event.respond("💎 **Premium Access**\n\nUpgrade for unlimited downloads and priority access.\nUse `/upgrade` to see payment options.")
         await event.answer()
 
-async def main():
-    import asyncio
-    from queue_manager import download_manager
-    from helpers.session_manager import session_manager
-    from helpers.cleanup import start_periodic_cleanup
-    
-    # Scheduled maintenance task (Runs every 30 minutes)
-    async def maintenance_task():
-        while True:
-            try:
-                LOGGER(__name__).info("Starting scheduled maintenance cleanup...")
-                from helpers.files import cleanup_orphaned_files
-                files_removed, bytes_freed = cleanup_orphaned_files()
-                
-                # Proactive RAM cleanup
-                import gc
-                # Clear all generations
-                gc.collect()
-                # Optimize memory layout by freezing long-lived objects
-                # and clearing internal caches
-                gc.freeze()
-                
-                LOGGER(__name__).info(f"Scheduled maintenance finished. Freed {bytes_freed} bytes.")
-            except Exception as e:
-                LOGGER(__name__).error(f"Maintenance task failed: {e}")
-            
-            await asyncio.sleep(1800) # 30 minutes
-
-    try:
-        # Restore latest backup from GitHub on startup
-        if PyroConf.CLOUD_BACKUP_SERVICE == "github":
-            try:
-                await restore_latest_from_cloud()
-            except Exception as e:
-                LOGGER(__name__).error(f"Initial restore failed: {e}")
-
-        await bot.start(bot_token=PyroConf.BOT_TOKEN)
-        await download_manager.start_processor()
-        LOGGER(__name__).info("Download queue processor initialized")
+    async def main():
+        from queue_manager import download_manager
+        from helpers.session_manager import session_manager
+        from helpers.cleanup import start_periodic_cleanup
         
-        # Start periodic backups in background
-        if PyroConf.CLOUD_BACKUP_SERVICE == "github":
-            asyncio.create_task(periodic_cloud_backup(interval_minutes=30))
-        
-        # Start cleanup tasks to prevent memory and disk leaks
-        phone_auth_handler.start_cleanup_task()
-        LOGGER(__name__).info("Phone auth cleanup task started")
-        
-        await session_manager.start_cleanup_task()
-        LOGGER(__name__).info("Session manager cleanup task started")
-        
-        asyncio.create_task(start_periodic_cleanup(interval_minutes=30))
-        LOGGER(__name__).info("Periodic file cleanup task started")
-        
-        asyncio.create_task(maintenance_task())
-        LOGGER(__name__).info("Maintenance task (RAM & Orphaned files) started")
-        
-        async def periodic_sweep():
-            """Periodically sweep stale items from download manager"""
-            while True:
-                try:
-                    await asyncio.sleep(1800)  # Every 30 minutes
-                    result = await download_manager.sweep_stale_items(max_age_minutes=60)
-                    if result['orphaned_tasks'] > 0 or result['expired_cooldowns'] > 0:
-                        LOGGER(__name__).info(f"Sweep completed: {result}")
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    LOGGER(__name__).error(f"Error in periodic sweep: {e}")
-        
-        asyncio.create_task(periodic_sweep())
-        LOGGER(__name__).info("Download manager sweep task started")
-        
-        LOGGER(__name__).info("Bot Started!")
-
-        @bot.on(events.NewMessage(pattern='/applypromo', incoming=True, func=lambda e: e.is_private))
-        @bot.on(events.NewMessage(pattern='/promo', incoming=True, func=lambda e: e.is_private))
-        @register_user
-        async def promo_handler(event):
-            """Handle /promo <code> or /applypromo <code> command"""
-            try:
-                args = get_command_args(event.text)
-                if len(args) < 1:
-                    await event.respond("**Usage:** `/promo <code>` or `/applypromo <code>`")
-                    return
-                
-                code = args[0].upper()
-                success, message = promo_manager.validate_and_apply(code, event.sender_id)
-                await event.respond(message)
-            except Exception as e:
-                await event.respond(f"❌ **Error:** {str(e)}")
-
-        await bot.run_until_disconnected()
-    except KeyboardInterrupt:
-        pass
-    except Exception as err:
-        LOGGER(__name__).error(err)
-    finally:
         try:
-            await session_manager.disconnect_all()
-            LOGGER(__name__).info("Disconnected all user sessions")
-        except Exception as e:
-            LOGGER(__name__).error(f"Error disconnecting sessions: {e}")
-        LOGGER(__name__).info("Bot Stopped")
+            # Restore latest backup from GitHub on startup
+            if PyroConf.CLOUD_BACKUP_SERVICE == "github":
+                try:
+                    await restore_latest_from_cloud()
+                except Exception as e:
+                    LOGGER(__name__).error(f"Initial restore failed: {e}")
 
-if __name__ == "__main__":
+            await bot.start(bot_token=PyroConf.BOT_TOKEN)
+            await download_manager.start_processor()
+            LOGGER(__name__).info("Download queue processor initialized")
+            
+            # Start periodic backups in background
+            if PyroConf.CLOUD_BACKUP_SERVICE == "github":
+                asyncio.create_task(periodic_cloud_backup(interval_minutes=30))
+            
+            # Start cleanup tasks to prevent memory and disk leaks
+            phone_auth_handler.start_cleanup_task()
+            LOGGER(__name__).info("Phone auth cleanup task started")
+            
+            await session_manager.start_cleanup_task()
+            LOGGER(__name__).info("Session manager cleanup task started")
+            
+            asyncio.create_task(start_periodic_cleanup(interval_minutes=30))
+            LOGGER(__name__).info("Periodic file cleanup task started")
+            
+            async def periodic_sweep():
+                """Periodically sweep stale items from download manager"""
+                while True:
+                    try:
+                        await asyncio.sleep(1800)  # Every 30 minutes
+                        result = await download_manager.sweep_stale_items(max_age_minutes=60)
+                        if result['orphaned_tasks'] > 0 or result['expired_cooldowns'] > 0:
+                            LOGGER(__name__).info(f"Sweep completed: {result}")
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as e:
+                        LOGGER(__name__).error(f"Error in periodic sweep: {e}")
+            
+            asyncio.create_task(periodic_sweep())
+            LOGGER(__name__).info("Download manager sweep task started")
+            
+            LOGGER(__name__).info("Bot Started!")
+
+            @bot.on(events.NewMessage(pattern='/applypromo', incoming=True, func=lambda e: e.is_private))
+            @bot.on(events.NewMessage(pattern='/promo', incoming=True, func=lambda e: e.is_private))
+            @register_user
+            async def promo_handler(event):
+                """Handle /promo <code> or /applypromo <code> command"""
+                try:
+                    args = get_command_args(event.text)
+                    if len(args) < 1:
+                        await event.respond("**Usage:** `/promo <code>` or `/applypromo <code>`")
+                        return
+                    
+                    code = args[0].upper()
+                    success, message = promo_manager.validate_and_apply(code, event.sender_id)
+                    await event.respond(message)
+                except Exception as e:
+                    await event.respond(f"❌ **Error:** {str(e)}")
+
+            await bot.run_until_disconnected()
+        except KeyboardInterrupt:
+            pass
+        except Exception as err:
+            LOGGER(__name__).error(err)
+        finally:
+            try:
+                await session_manager.disconnect_all()
+                LOGGER(__name__).info("Disconnected all user sessions")
+            except Exception as e:
+                LOGGER(__name__).error(f"Error disconnecting sessions: {e}")
+            LOGGER(__name__).info("Bot Stopped")
+    
     import asyncio
-    # Set the bot start time to filter old updates
-    bot.start_time = time()
     asyncio.run(main())
