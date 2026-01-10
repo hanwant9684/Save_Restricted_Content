@@ -147,8 +147,13 @@ async def upload_media_fast(
                 pass
         gc.collect()
 
-def get_connection_count_for_size(file_size: int, max_count: int = 1) -> int:
-    return max_count
+def get_connection_count_for_size(file_size: int, max_count: int = 2) -> int:
+    if file_size >= 50 * 1024 * 1024:
+        return max_count
+    elif file_size >= 10 * 1024 * 1024:
+        return min(2, max_count)
+    else:
+        return min(1, max_count)
 
 def _optimized_connection_count_upload(file_size, max_count=MAX_UPLOAD_CONNECTIONS, full_size=100*1024*1024):
     return get_connection_count_for_size(file_size, max_count)
