@@ -597,7 +597,6 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                     start_time,
                     event.sender_id,
                     source_url=post_url,
-                    original_message=chat_message,
                 )
                 return True
 

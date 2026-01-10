@@ -127,7 +127,7 @@ class PyroConf:
     
     # Connection Configuration for Transfers
     # VPS has 1Gbps speed and 2GB RAM - we can go much higher
-    MAX_DOWNLOAD_CONNECTIONS = 1
+    MAX_DOWNLOAD_CONNECTIONS = 2
     MAX_UPLOAD_CONNECTIONS = 8
     
     @staticmethod
