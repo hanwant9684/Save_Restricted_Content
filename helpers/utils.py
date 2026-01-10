@@ -630,12 +630,13 @@ def progressArgs(action: str, progress_message, start_time):
 
 
 async def send_media(
-    bot, message, media_path, media_type, caption, progress_message, start_time, user_id=None, source_url=None
+    bot, message, media_path, media_type, caption, progress_message, start_time, user_id=None, source_url=None, original_message=None
 ):
     """Upload media with all safeguards (size checks, fast uploads, thumbnails, dump channel).
     
     Args:
         source_url: Original download URL for tracking in dump channel (no extra RAM usage)
+        original_message: The original Telegram message to extract thumbnail from
     
     Returns:
         bool: True if upload succeeded, False if it was rejected or failed
@@ -700,8 +701,29 @@ async def send_media(
                 supports_streaming=True
             ))
         
-        # Generate thumbnail for video
-        thumb_path = await generate_thumbnail(media_path, duration=duration)
+        # Reuse original thumbnail if possible
+        thumb_path = None
+        if original_message and original_message.media:
+            try:
+                # Telethon: original_message.video.thumbs or original_message.document.thumbs
+                # We can use download_media on the thumb object directly
+                thumb_obj = None
+                if hasattr(original_message, 'video') and original_message.video and original_message.video.thumbs:
+                    thumb_obj = original_message.video.thumbs[-1]
+                elif hasattr(original_message, 'document') and original_message.document and original_message.document.thumbs:
+                    thumb_obj = original_message.document.thumbs[-1]
+                
+                if thumb_obj:
+                    thumb_path = media_path + ".original_thumb.jpg"
+                    await bot.download_media(thumb_obj, file=thumb_path)
+                    LOGGER(__name__).info(f"Reusing original thumbnail for video: {thumb_path}")
+            except Exception as e:
+                LOGGER(__name__).debug(f"Failed to reuse original thumbnail: {e}")
+                thumb_path = None
+
+        # Generate thumbnail only if original reuse failed
+        if not thumb_path:
+            thumb_path = await generate_thumbnail(media_path, duration=duration)
         
         # Fallback to custom thumbnail if generation failed
         if not thumb_path and user_id:
@@ -910,7 +932,8 @@ async def _process_single_media_file(
         progress_message=progress_message,
         start_time=file_start_time,
         user_id=user_id,
-        source_url=source_url
+        source_url=source_url,
+        original_message=msg
     )
     
     return result_path, upload_success
