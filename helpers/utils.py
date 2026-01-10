@@ -714,11 +714,19 @@ async def send_media(
                     thumb_obj = original_message.document.thumbs[-1]
                 
                 if thumb_obj:
-                    thumb_path = media_path + ".original_thumb.jpg"
+                    # Use a unique temporary path for the thumbnail in the system temp directory
+                    import tempfile
+                    temp_thumb = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+                    thumb_path = temp_thumb.name
+                    temp_thumb.close()
+                    
                     await bot.download_media(thumb_obj, file=thumb_path)
                     LOGGER(__name__).info(f"Reusing original thumbnail for video: {thumb_path}")
             except Exception as e:
                 LOGGER(__name__).debug(f"Failed to reuse original thumbnail: {e}")
+                if thumb_path and os.path.exists(thumb_path):
+                    try: os.remove(thumb_path)
+                    except: pass
                 thumb_path = None
 
         # Generate thumbnail only if original reuse failed
