@@ -127,10 +127,8 @@ class PyroConf:
     
     # Connection Configuration for Transfers
     # VPS has 1Gbps speed and 2GB RAM - we can go much higher
-    try:
-        CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "4"))
-    except ValueError:
-        CONNECTIONS_PER_TRANSFER = 4
+    MAX_DOWNLOAD_CONNECTIONS = 4
+    MAX_UPLOAD_CONNECTIONS = 8
     
     @staticmethod
     def get_app_url() -> str:

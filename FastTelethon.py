@@ -160,10 +160,8 @@ class ParallelTransferrer:
     @staticmethod
     def _get_connection_count(file_size: int, max_count: int = 4,
                               full_size: int = 100 * 1024 * 1024) -> int:
-        # Each user has their own session, so each transfer can use full connection capacity
-        # This method is monkeypatched by helpers/transfer.py with size-aware logic
-        if file_size <= 0:
-            return 4  # Safe fallback for unknown size
+        # This method is monkeypatched by helpers/transfer.py
+        # Fallback to a safe default if not monkeypatched
         return max_count
 
     async def _init_download(self, connections: int, file: TypeLocation, part_count: int,
