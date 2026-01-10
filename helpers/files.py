@@ -233,7 +233,7 @@ def cleanup_orphaned_files() -> tuple[int, int]:
         # Cleanup media files in root directory (from crashes)
         media_extensions = ['*.MOV', '*.mov', '*.MP4', '*.mp4', '*.MKV', '*.mkv', 
                           '*.AVI', '*.avi', '*.JPG', '*.jpg', '*.JPEG', '*.jpeg',
-                          '*.PNG', '*.png', '*.temp', '*.tmp']
+                          '*.PNG', '*.png', '*.temp', '*.tmp', '*.aria2', '*.parts']
         
         for pattern in media_extensions:
             for filepath in glob.glob(pattern):
