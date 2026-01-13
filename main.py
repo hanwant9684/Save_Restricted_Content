@@ -210,12 +210,13 @@ async def start(event):
     sender = await event.get_sender()
     lang_code = getattr(sender, 'lang_code', 'en') or 'en'
     user_type = db.get_user_type(event.sender_id)
-    is_premium = user_type == 'paid'
+    is_user_premium = user_type == 'paid'
     is_admin = db.is_admin(event.sender_id)
 
-    # Show ad forcefully for ALL users on /start
+    # Show ad forcefully for ALL users on /start if configured
     # Note: If user hasn't accepted legal terms, this is handled in the if block above via show_legal_acceptance
-    await richads.send_ad_to_user(bot, event.sender_id, language_code=lang_code)
+    if richads.is_enabled() and (not is_user_premium or richads.for_premium):
+        await richads.send_ad_to_user(bot, event.sender_id, language_code=lang_code)
 
     welcome_text = (
         "🎉 **Welcome to Save Restricted Content Bot!**\n\n"
@@ -353,10 +354,14 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
     # Resolve URL and show ad first
     LOGGER(__name__).info(f"📥 LINK RECEIVED | User: {event.sender_id} | Link: {post_url}")
     
-    # Show ad forcefully on every download for all users
+    # Show ad forcefully on every download if configured
     sender = await event.get_sender()
     lang_code = getattr(sender, 'lang_code', 'en') or 'en'
-    await richads.send_ad_to_user(bot_client, event.sender_id, language_code=lang_code)
+    user_type = db.get_user_type(event.sender_id)
+    is_user_premium = user_type == 'paid'
+    
+    if richads.is_enabled() and (not is_user_premium or richads.for_premium):
+        await richads.send_ad_to_user(bot_client, event.sender_id, language_code=lang_code)
 
     try:
         LOGGER(__name__).debug(f"Attempting to parse URL: {post_url}")
@@ -1793,8 +1798,11 @@ if __name__ == "__main__":
         sender = await event.get_sender()
         lang_code = getattr(sender, 'lang_code', 'en') or 'en'
         
-        # Show the ad
-        success = await richads.send_ad_to_user(bot, event.chat_id, lang_code)
+        # Show the ad if configured
+        if richads.is_enabled() and (not db.get_user_type(user_id) == 'paid' or richads.for_premium):
+            success = await richads.send_ad_to_user(bot, event.chat_id, lang_code)
+        else:
+            success = False # Skip or fallback
         
         if success:
             # Increment ad downloads quota in DB

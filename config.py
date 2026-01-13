@@ -82,6 +82,7 @@ class PyroConf:
     RICHADS_PUBLISHER_ID = os.getenv("RICHADS_PUBLISHER_ID", "")
     RICHADS_WIDGET_ID = os.getenv("RICHADS_WIDGET_ID", "")
     RICHADS_PRODUCTION = os.getenv("RICHADS_PRODUCTION", "true").lower() == "true"
+    RICHADS_FOR_PREMIUM = os.getenv("RICHADS_FOR_PREMIUM", "false").lower() == "true"
     
     # Cloud Backup Configuration (GitHub)
     CLOUD_BACKUP_SERVICE = os.getenv("CLOUD_BACKUP_SERVICE", "").lower().strip()

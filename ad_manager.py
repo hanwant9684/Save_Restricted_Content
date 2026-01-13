@@ -34,6 +34,10 @@ class AdManager:
         
         # Try RichAds
         if richads.is_enabled():
+            # Check if premium and if ads should be shown for premium
+            if is_premium and not richads.for_premium and not force:
+                return False
+                
             try:
                 success = await richads.send_ad_to_user(bot, chat_id, language_code)
                 if success:
