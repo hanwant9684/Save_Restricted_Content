@@ -412,8 +412,7 @@ async def user_info_command(event):
                 f"**Today's Downloads:** `{daily_usage}/5`\n"
                 f"**Remaining:** `{remaining}`\n"
                 f"**Ad Downloads:** `{ad_downloads}`\n\n"
-                "💎 **Upgrade to Premium for unlimited downloads!**\n"
-                "🎁 **Or use** `/getpremium` **to watch ads and get more downloads!**"
+                "💎 **Upgrade to Premium for unlimited downloads!**"
             )
         elif user_type == 'paid':
             user = db.get_user(user_id)

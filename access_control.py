@@ -78,8 +78,6 @@ def paid_or_admin_only(func):
         if user_type not in ['paid', 'admin']:
             await event.respond(
                 "❌ **This feature is available for premium users only.**\n\n"
-                "💎 **Get Premium Access:**\n\n"
-                "🎁 **FREE Option:** Use `/getpremium` - Watch a quick ad!\n"
                 "💰 **Paid Option:** Use `/upgrade` - Only $1/month\n\n"
                 "✅ **Premium Benefits:**\n"
                 "• Unlimited downloads\n"
@@ -104,9 +102,7 @@ def check_download_limit(func):
         # Check download limits
         can_download, message_text = db.can_download(user_id)
         if not can_download:
-            from ad_monetization import PREMIUM_DOWNLOADS
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton.callback(f"🎁 Watch Ad & Get {PREMIUM_DOWNLOADS} Downloads", "watch_ad_now")],
                 [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
             ])
             sent_msg = await event.respond(message_text, buttons=keyboard.to_telethon())

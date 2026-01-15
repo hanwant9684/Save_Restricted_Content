@@ -117,7 +117,7 @@ def load_template(code, title, message, bot_username):
         <p style="margin-bottom: 15px;">{escape(message)}</p>
         <ol>
             <li>Go back to the Telegram bot</li>
-            <li>Use <code>/getpremium</code> to get a new ad link</li>
+            <li>Request a new verification link</li>
             <li>Complete the ad verification</li>
             <li>You'll receive a valid code</li>
         </ol>
@@ -329,7 +329,7 @@ def application(environ, start_response):
             LOGGER(__name__).info(f"Received /verify-ad request with session: {session_id[:16] if session_id else 'empty'}... | confirm={confirm}")
             
             if not session_id:
-                html = load_template('', 'Invalid Request', 'No session ID provided. Please use the link from /getpremium command.', PyroConf.BOT_USERNAME or '')
+                html = load_template('', 'Invalid Request', 'No session ID provided.', PyroConf.BOT_USERNAME or '')
             elif confirm != '1':
                 # Show landing page - prevents shortener services from triggering code generation
                 LOGGER(__name__).info(f"Showing landing page for session {session_id[:16]}... (no confirm parameter)")

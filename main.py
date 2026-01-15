@@ -199,7 +199,7 @@ async def start(event):
         else:
             await event.respond(
                 f"❌ **Verification Failed**\n\n{msg}\n\n"
-                "Please try getting a new code with `/getpremium`"
+                "Please try again."
             )
             LOGGER(__name__).warning(f"❌ AUTO-VERIFICATION FAILED | User: {event.sender_id} ({username}) | Reason: {msg}")
         return
@@ -227,13 +227,7 @@ async def start(event):
         "**Step 3:** Start downloading!\n"
         "   📥 Just paste any Telegram link\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "💎 **Get Free Downloads:**\n\n"
-        "🎁 **Option 1: FREE (Watch Ads)**\n"
-        "   📥 5 free download per ad session\n"
-        "   📺 Complete quick verification steps\n"
-        "   ♻️ Repeat anytime!\n"
-        "   👉 Use: `/getpremium`\n\n"
-        "💰 **Option 2: Paid ($2/month)**\n"
+        "💰 **Premium Access ($2/month)**\n"
         "   ⭐ 7/15/30 days unlimited access\n"
         "   🚀 Priority downloads\n"
         "   📦 Batch download support upto**(200)**\n"
@@ -307,11 +301,6 @@ async def help_command(event):
             "   📊 5 downloads per day\n"
             "   ❌ No batch downloads\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "💎 **Get More Downloads:**\n\n"
-            "🎁 **FREE Downloads (Watch Ads):**\n"
-            "   `/getpremium` - Get 5 free download\n"
-            "   📺 Complete verification steps\n"
-            "   ♻️ Repeat anytime!\n\n"
             "💰 **Paid Premium ($2/month):**\n"
             "   `/upgrade` - View payment options\n"
             "   ⭐ 7/15/30 days unlimited access\n"
@@ -508,7 +497,6 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                 can_dl, quota_msg = db.can_download(event.sender_id, file_count)
                 if not can_dl:
                     keyboard = InlineKeyboardMarkup([
-                        [InlineKeyboardButton.callback(f"🎁 Watch Ad & Get {PREMIUM_DOWNLOADS} Downloads", "watch_ad_now")],
                         [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
                     ])
                     await event.respond(quota_msg, buttons=keyboard.to_telethon())
@@ -536,7 +524,6 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                     total_left = remaining['total']  # ad_downloads + daily_remaining
                     
                     upgrade_keyboard = InlineKeyboardMarkup([
-                        [InlineKeyboardButton.callback(f"🎁 Watch Ad & Get {PREMIUM_DOWNLOADS} Downloads", "watch_ad_now")],
                         [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
                     ])
                     
@@ -622,7 +609,6 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                         total_left = remaining['total']  # ad_downloads + daily_remaining
                         
                         upgrade_markup = InlineKeyboardMarkup([
-                            [InlineKeyboardButton.callback(f"🎁 Watch Ad & Get {PREMIUM_DOWNLOADS} Downloads", "watch_ad_now")],
                             [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
                         ])
                         
@@ -1329,106 +1315,7 @@ async def apply_promo_handler(event):
         await event.respond(f"❌ **Error applying promo code:** {str(e)}")
         LOGGER(__name__).error(f"Error in apply_promo_handler: {e}")
 
-@bot.on(events.NewMessage(pattern='/getpremium', incoming=True, func=lambda e: e.is_private))
-@register_user
-async def get_premium_command(event):
-    """Generate ad link for temporary premium access"""
-    LOGGER(__name__).info(f"get_premium_command triggered by user {event.sender_id}")
-    try:
-        user_type = db.get_user_type(event.sender_id)
-        
-        if user_type == 'paid':
-            user = db.get_user(event.sender_id)
-            expiry_date_str = user.get('subscription_end', 'N/A') if user else 'N/A'
-            
-            # Calculate time remaining
-            time_left_msg = ""
-            if expiry_date_str != 'N/A':
-                try:
-                    from datetime import datetime
-                    expiry_date = datetime.strptime(expiry_date_str, '%Y-%m-%d %H:%M:%S')
-                    time_remaining = expiry_date - datetime.now()
-                    
-                    days = time_remaining.days
-                    hours = time_remaining.seconds // 3600
-                    minutes = (time_remaining.seconds % 3600) // 60
-                    
-                    if days > 0:
-                        time_left_msg = f"⏱️ **Expires in:** {days} days, {hours} hours"
-                    elif hours > 0:
-                        time_left_msg = f"⏱️ **Expires in:** {hours} hours, {minutes} minutes"
-                    else:
-                        time_left_msg = f"⏱️ **Expires in:** {minutes} minutes"
-                except:
-                    time_left_msg = f"📅 **Valid until:** {expiry_date_str}"
-            else:
-                time_left_msg = "📅 **Permanent premium**"
-            
-            await event.respond(
-                f"✅ **You already have premium subscription!**\n\n"
-                f"{time_left_msg}\n\n"
-                f"No need to watch ads! Enjoy your unlimited downloads."
-            )
-            return
-        
-        bot_domain = PyroConf.get_app_url()
-        
-        session_id, ad_url = ad_monetization.generate_ad_link(event.sender_id, bot_domain)
-        
-        premium_text = (
-            f"🎬 **Get {PREMIUM_DOWNLOADS} FREE downloads!**\n\n"
-            "**How it works:**\n"
-            "1️⃣ Click the button below\n"
-            "2️⃣ Navigate through pages 1-5 on our blog (2.5 minutes total)\n"
-            "3️⃣ A timer will show your progress at the top\n"
-            "4️⃣ After completing all pages, get your verification code\n"
-            "5️⃣ Send: `/verifypremium <code>`\n\n"
-            "⚠️ **Note:** You must visit 5 different pages within the time limit!\n\n"
-            "⏱️ Session expires in 30 minutes"
-        )
-        
-        markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton.url(f"🎁 Start Verification (Visit Pages 1-5)", ad_url)],
-            [InlineKeyboardButton.url("❓ Don't know How to Verify", "https://t.me/Wolfy004/43")]
-        ])
-        
-        # Send with video (message ID 42)
-        await send_video_message(event, 42, premium_text, markup, "getpremium command")
-        LOGGER(__name__).info(f"User {event.sender_id} requested ad-based premium")
-        
-    except Exception as e:
-        await event.respond(f"❌ **Error generating premium link:** {str(e)}")
-        LOGGER(__name__).error(f"Error in get_premium_command: {e}")
-
-@bot.on(events.NewMessage(pattern='/verifypremium', incoming=True, func=lambda e: e.is_private))
-@register_user
-async def verify_premium_command(event):
-    """Verify ad completion code and grant temporary premium"""
-    LOGGER(__name__).info(f"verify_premium_command triggered by user {event.sender_id}")
-    try:
-        command = parse_command(event.text)
-        if len(command) < 2:
-            await event.respond(
-                "**Usage:** `/verifypremium <code>`\n\n"
-                "**Example:** `/verifypremium ABC123DEF456`\n\n"
-                "Get your code by using `/getpremium` first!"
-            )
-            return
-        
-        verification_code = command[1].strip()
-        
-        success, msg = ad_monetization.verify_code(verification_code, event.sender_id)
-        
-        if success:
-            await event.respond(msg)
-            LOGGER(__name__).info(f"User {event.sender_id} successfully verified ad code and received downloads")
-        else:
-            await event.respond(msg)
-            
-    except Exception as e:
-        await event.respond(f"❌ **Error verifying code:** {str(e)}")
-        LOGGER(__name__).error(f"Error in verify_premium_command: {e}")
-
+# Removed /getpremium and /verifypremium commands
 @bot.on(events.NewMessage(pattern='/upgrade', incoming=True, func=lambda e: e.is_private))
 @register_user
 async def upgrade_command(event):
@@ -1442,17 +1329,7 @@ async def upgrade_command(event):
         "✅ Priority support\n"
         "✅ No daily limits\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "**🎯 Option 1: Watch Ads (FREE)**\n"
-        f"📥 **{PREMIUM_DOWNLOADS} Free Downloads**\n"
-        "📺 Complete quick verification steps!\n\n"
-        "**How it works:**\n"
-        "1️⃣ Use `/getpremium` command\n"
-        "2️⃣ Click the link and complete 3 steps\n"
-        "3️⃣ Get verification code\n"
-        "4️⃣ Send code back to bot\n"
-        f"5️⃣ Enjoy {PREMIUM_DOWNLOADS} free downloads! 🎉\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "**💰 Option 2: Monthly Subscription**\n"
+        "**💰 Option: Monthly Subscription**\n"
         "💵 **7/15/30 Days Premium = $1/$1.5/$2 USD**\n\n"
         "**How to Subscribe:**\n"
     )
@@ -1536,224 +1413,8 @@ async def callback_handler(event):
     
     data = event.data.decode('utf-8') if isinstance(event.data, bytes) else event.data
     
-    if data == "get_free_premium":
-        user_id = event.sender_id
-        user_type = db.get_user_type(user_id)
-        
-        if user_type == 'paid':
-            await event.answer("You already have premium subscription!", alert=True)
-            return
-        
-        bot_domain = PyroConf.get_app_url()
-        verification_code, ad_url = ad_monetization.generate_ad_link(user_id, bot_domain)
-        
-        premium_text = (
-            f"🎬 **Get {PREMIUM_DOWNLOADS} FREE downloads!**\n\n"
-            "**How it works:**\n"
-            "1️⃣ Click the button below\n"
-            "2️⃣ View the short ad (5-10 seconds)\n"
-            "3️⃣ Your verification code will appear automatically\n"
-            "4️⃣ Copy the code and send: `/verifypremium <code>`\n\n"
-            "⚠️ **Note:** Please wait for the ad page to fully load!\n\n"
-            "⏱️ Code expires in 30 minutes"
-        )
-        
-        markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton.url(f"🎁 Watch Ad & Get {PREMIUM_DOWNLOADS} Downloads", ad_url)]
-        ])
-        
-        await event.answer()
-        
-        # Send with video (message ID 42) - create a mock event from the message
-        class MessageEvent:
-            def __init__(self, message):
-                self.message = message
-                self.sender_id = message.peer_id.user_id if hasattr(message.peer_id, 'user_id') else user_id
-            async def respond(self, *args, **kwargs):
-                return await bot.send_message(self.message.peer_id, *args, **kwargs)
-        
-        msg_event = MessageEvent(event.message if hasattr(event, 'message') else event)
-        await send_video_message(msg_event, 42, premium_text, markup, "get_free_premium callback")
-        LOGGER(__name__).info(f"User {user_id} requested ad-based premium via button")
-        
-    elif data == "get_paid_premium":
-        await event.answer()
-        
-        upgrade_text = (
-            "💎 **Upgrade to Premium**\n\n"
-            "**Premium Features:**\n"
-            "✅ Unlimited downloads per day\n"
-            "✅ Batch download support (/bdl command)\n"
-            "✅ Download up to 200 posts at once\n"
-            "✅ Priority support\n"
-            "✅ No daily limits\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "**🎯 Option 1: Watch Ads (FREE)**\n"
-            f"🎁 **Get {PREMIUM_DOWNLOADS} FREE Downloads**\n"
-            "📺 Just watch a short ad!\n\n"
-            "**How it works:**\n"
-            "1️⃣ Use `/getpremium` command\n"
-            "2️⃣ Complete 3 verification steps\n"
-            "3️⃣ Get verification code\n"
-            "4️⃣ Send code back to bot\n"
-            f"5️⃣ Enjoy {PREMIUM_DOWNLOADS} free downloads! 🎉\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "**💰 Option 2: Monthly Subscription**\n"
-            "💵 **7/15/30 Days Premium = $1/$1.5/$2 USD**\n\n"
-            "**How to Subscribe:**\n"
-        )
-        
-        payment_methods_available = PyroConf.PAYPAL_URL or PyroConf.UPI_ID or PyroConf.TELEGRAM_TON or PyroConf.CRYPTO_ADDRESS
-        
-        if payment_methods_available:
-            upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n\n"
-            
-            if PyroConf.PAYPAL_URL:
-                upgrade_text += f"   💳 **PayPal:** {PyroConf.PAYPAL_URL}\n\n"
-            
-            if PyroConf.UPI_ID:
-                upgrade_text += f"   📱 **UPI (India):** `{PyroConf.UPI_ID}`\n\n"
-            
-            if PyroConf.TELEGRAM_TON:
-                upgrade_text += f"   🛒 **Telegram Pay (TON):** `{PyroConf.TELEGRAM_TON}`\n\n"
-            
-            if PyroConf.CRYPTO_ADDRESS:
-                upgrade_text += f"   ₿ **Crypto (USDT/BTC/ETH):** `{PyroConf.CRYPTO_ADDRESS}`\n"
-            
-            upgrade_text += "\n"
-        
-        if PyroConf.ADMIN_USERNAME:
-            upgrade_text += f"2️⃣ **Contact Admin:**\n   👤 @{PyroConf.ADMIN_USERNAME}\n\n"
-        else:
-            upgrade_text += f"2️⃣ **Contact Admin:**\n   👤 Contact the bot owner\n\n"
-        
-        upgrade_text += (
-            "3️⃣ **Send Payment Proof:**\n"
-            "   Send screenshot/transaction ID to admin\n\n"
-            "4️⃣ **Get Activated:**\n"
-            "   Admin will activate your premium within 24 hours!"
-        )
-        
-        await bot.send_message(event.chat_id, upgrade_text, link_preview=False)
-    
-    elif data == "watch_ad_now":
-        user_id = event.sender_id
-        user_type = db.get_user_type(user_id)
-        
-        if user_type == 'paid':
-            await event.answer("You already have premium subscription!", alert=True)
-            return
-        
-        bot_domain = PyroConf.get_app_url()
-        verification_code, ad_url = ad_monetization.generate_ad_link(user_id, bot_domain)
-        
-        premium_text = (
-            f"🎬 **Get {PREMIUM_DOWNLOADS} FREE downloads!**\n\n"
-            "**How it works:**\n"
-            "1️⃣ Click the button below\n"
-            "2️⃣ View the short ad (5-10 seconds)\n"
-            "3️⃣ Your verification code will appear automatically\n"
-            "4️⃣ Copy the code and send: `/verifypremium <code>`\n\n"
-            "⚠️ **Note:** Please wait for the ad page to fully load!\n\n"
-            "⏱️ Code expires in 30 minutes"
-        )
-        
-        markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton.url(f"🎁 Watch Ad & Get {PREMIUM_DOWNLOADS} Downloads", ad_url)]
-        ])
-        
-        await event.answer()
-        
-        # Send with video (message ID 42) to the user's chat
-        try:
-            video_message = await bot.get_messages("Wolfy004", ids=42)
-            if video_message and video_message.video:
-                await bot.send_message(
-                    user_id,
-                    premium_text,
-                    file=video_message.video,
-                    buttons=markup.to_telethon()
-                )
-            else:
-                await bot.send_message(
-                    user_id,
-                    premium_text,
-                    buttons=markup.to_telethon(),
-                    link_preview=False
-                )
-        except Exception as e:
-            LOGGER(__name__).warning(f"Could not send video in watch_ad_now callback: {e}")
-            await bot.send_message(
-                user_id,
-                premium_text,
-                buttons=markup.to_telethon(),
-                link_preview=False
-            )
-        
-        LOGGER(__name__).info(f"User {user_id} requested ad-based download via button")
-    
-    elif data == "upgrade_premium":
-        await event.answer()
-        
-        upgrade_text = (
-            "💎 **Upgrade to Premium**\n\n"
-            "**Premium Features:**\n"
-            "✅ Unlimited downloads per day\n"
-            "✅ Batch download support (/bdl command)\n"
-            "✅ Download up to 200 posts at once\n"
-            "✅ Priority support\n"
-            "✅ No daily limits\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "**🎯 Option 1: Watch Ads (FREE)**\n"
-            f"🎁 **Get {PREMIUM_DOWNLOADS} FREE Download**\n"
-            "📺 Just watch a short ad!\n\n"
-            "**How it works:**\n"
-            "1️⃣ Use `/getpremium` command\n"
-            "2️⃣ Complete 3 verification steps\n"
-            "3️⃣ Get verification code\n"
-            "4️⃣ Send code back to bot\n"
-            f"5️⃣ Enjoy {PREMIUM_DOWNLOADS} free download! 🎉\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "**💰 Option 2: Monthly Subscription**\n"
-            "💵 **7/15/30 Days Premium = $1/$1.5/$2 USD**\n\n"
-            "**How to Subscribe:**\n"
-        )
-        
-        payment_methods_available = PyroConf.PAYPAL_URL or PyroConf.UPI_ID or PyroConf.TELEGRAM_TON or PyroConf.CRYPTO_ADDRESS
-        
-        if payment_methods_available:
-            upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n\n"
-            
-            if PyroConf.PAYPAL_URL:
-                upgrade_text += f"   💳 **PayPal:** {PyroConf.PAYPAL_URL}\n\n"
-            
-            if PyroConf.UPI_ID:
-                upgrade_text += f"   📱 **UPI (India):** `{PyroConf.UPI_ID}`\n\n"
-            
-            if PyroConf.TELEGRAM_TON:
-                upgrade_text += f"   🛒 **Telegram Pay (TON):** `{PyroConf.TELEGRAM_TON}`\n\n"
-            
-            if PyroConf.CRYPTO_ADDRESS:
-                upgrade_text += f"   ₿ **Crypto (USDT/BTC/ETH):** `{PyroConf.CRYPTO_ADDRESS}`\n"
-            
-            upgrade_text += "\n"
-        
-        if PyroConf.ADMIN_USERNAME:
-            upgrade_text += f"2️⃣ **Contact Admin:**\n   👤 @{PyroConf.ADMIN_USERNAME}\n\n"
-        else:
-            upgrade_text += f"2️⃣ **Contact Admin:**\n   👤 Contact the bot owner\n\n"
-        
-        upgrade_text += (
-            "3️⃣ **Send Payment Proof:**\n"
-            "   Send screenshot/transaction ID to admin\n\n"
-            "4️⃣ **Get Activated:**\n"
-            "   Admin will activate your premium within 24 hours!"
-        )
-        
-        await bot.send_message(event.chat_id, upgrade_text, link_preview=False)
-        
-    else:
-        await broadcast_callback_handler(event)
+    # Removed get_free_premium, watch_ad_now, and /getpremium command logic
+    await broadcast_callback_handler(event)
 
 # Queue processor will be started by server_wsgi.py using asyncio (not threading)
 # This avoids duplicate initialization and saves RAM by not creating extra threads
@@ -1789,161 +1450,112 @@ async def verify_dump_channel():
 # This ensures downloaded files are cleaned up every 30 minutes to prevent memory/disk leaks
 
 if __name__ == "__main__":
-    @bot.on(events.CallbackQuery(data=b"watch_ad_now"))
-    async def watch_ad_callback(event):
-        """Handle the 'Watch Ad & Get Downloads' button callback"""
-        user_id = event.sender_id
-        sender = await event.get_sender()
-        lang_code = getattr(sender, 'lang_code', 'en') or 'en'
+    # Removed watch_ad_callback and upgrade_premium_callback handlers
+    async def main():
+        import asyncio
+        from queue_manager import download_manager
+        from helpers.session_manager import session_manager
+        from helpers.cleanup import start_periodic_cleanup
         
-        # Show the ad if configured
-        if richads.is_enabled() and (not db.get_user_type(user_id) == 'paid' or richads.for_premium):
-            success = await richads.send_ad_to_user(bot, event.chat_id, lang_code)
-        else:
-            success = False # Skip or fallback
-        
-        if success:
-            # Increment ad downloads quota in DB
-            db.add_ad_downloads(user_id, PREMIUM_DOWNLOADS)
-            await event.respond(f"✅ **Ad watched!**\n\n🎁 You've received **{PREMIUM_DOWNLOADS}** extra downloads for this session!")
-            LOGGER(__name__).info(f"User {user_id} watched ad via button and got {PREMIUM_DOWNLOADS} downloads")
-        else:
-            # Fallback to original watch ad (blog link) if RichAds has no ads
-            from ad_monetization import ad_monetization
-            from config import PyroConf
-            
-            bot_domain = PyroConf.get_app_url()
-            session_id, ad_url = ad_monetization.generate_ad_link(user_id, bot_domain)
-            
-            markup = InlineKeyboardMarkup([
-                [InlineKeyboardButton.url("🔗 Watch Ad Now", ad_url)],
-                [InlineKeyboardButton.callback("✅ Verify Completion", f"verify_ad_{session_id}")]
-            ])
-            
-            await event.respond(
-                "📺 **No direct ads available right now.**\n\n"
-                "Don't worry! You can still get your **5 free downloads** by watching an ad on our website.\n\n"
-                "1. Click the button below\n"
-                "2. Complete the ad on the page\n"
-                "3. Come back and click 'Verify Completion'",
-                buttons=markup.to_telethon()
-            )
-            LOGGER(__name__).info(f"User {user_id} failed to get RichAd, falling back to blog ad link")
-
-    @bot.on(events.CallbackQuery(data=b"upgrade_premium"))
-    async def upgrade_premium_callback(event):
-        """Handle 'Upgrade to Premium' button callback"""
-        # Redirect to upgrade command logic
-        from admin_commands import user_info_command
-        await event.respond("💎 **Premium Access**\n\nUpgrade for unlimited downloads and priority access.\nUse `/upgrade` to see payment options.")
-        await event.answer()
-
-async def main():
-    import asyncio
-    from queue_manager import download_manager
-    from helpers.session_manager import session_manager
-    from helpers.cleanup import start_periodic_cleanup
-    
-    # Scheduled maintenance task (Runs every 30 minutes)
-    async def maintenance_task():
-        while True:
-            try:
-                LOGGER(__name__).info("Starting scheduled maintenance cleanup...")
-                from helpers.files import cleanup_orphaned_files
-                files_removed, bytes_freed = cleanup_orphaned_files()
-                
-                # Proactive RAM cleanup
-                import gc
-                # Clear all generations
-                gc.collect()
-                # Optimize memory layout by freezing long-lived objects
-                # and clearing internal caches
-                gc.freeze()
-                
-                LOGGER(__name__).info(f"Scheduled maintenance finished. Freed {bytes_freed} bytes.")
-            except Exception as e:
-                LOGGER(__name__).error(f"Maintenance task failed: {e}")
-            
-            await asyncio.sleep(1800) # 30 minutes
-
-    try:
-        # Restore latest backup from GitHub on startup
-        if PyroConf.CLOUD_BACKUP_SERVICE == "github":
-            try:
-                await restore_latest_from_cloud()
-            except Exception as e:
-                LOGGER(__name__).error(f"Initial restore failed: {e}")
-
-        await bot.start(bot_token=PyroConf.BOT_TOKEN)
-        await download_manager.start_processor()
-        LOGGER(__name__).info("Download queue processor initialized")
-        
-        # Start periodic backups in background
-        if PyroConf.CLOUD_BACKUP_SERVICE == "github":
-            asyncio.create_task(periodic_cloud_backup(interval_minutes=30))
-        
-        # Start cleanup tasks to prevent memory and disk leaks
-        phone_auth_handler.start_cleanup_task()
-        LOGGER(__name__).info("Phone auth cleanup task started")
-        
-        await session_manager.start_cleanup_task()
-        LOGGER(__name__).info("Session manager cleanup task started")
-        
-        asyncio.create_task(start_periodic_cleanup(interval_minutes=30))
-        LOGGER(__name__).info("Periodic file cleanup task started")
-        
-        asyncio.create_task(maintenance_task())
-        LOGGER(__name__).info("Maintenance task (RAM & Orphaned files) started")
-        
-        async def periodic_sweep():
-            """Periodically sweep stale items from download manager"""
+        # Scheduled maintenance task (Runs every 30 minutes)
+        async def maintenance_task():
             while True:
                 try:
-                    await asyncio.sleep(1800)  # Every 30 minutes
-                    result = await download_manager.sweep_stale_items(max_age_minutes=60)
-                    if result['orphaned_tasks'] > 0 or result['expired_cooldowns'] > 0:
-                        LOGGER(__name__).info(f"Sweep completed: {result}")
-                except asyncio.CancelledError:
-                    break
+                    LOGGER(__name__).info("Starting scheduled maintenance cleanup...")
+                    from helpers.files import cleanup_orphaned_files
+                    files_removed, bytes_freed = cleanup_orphaned_files()
+                    
+                    # Proactive RAM cleanup
+                    import gc
+                    # Clear all generations
+                    gc.collect()
+                    # Optimize memory layout by freezing long-lived objects
+                    # and clearing internal caches
+                    gc.freeze()
+                    
+                    LOGGER(__name__).info(f"Scheduled maintenance finished. Freed {bytes_freed} bytes.")
                 except Exception as e:
-                    LOGGER(__name__).error(f"Error in periodic sweep: {e}")
-        
-        asyncio.create_task(periodic_sweep())
-        LOGGER(__name__).info("Download manager sweep task started")
-        
-        LOGGER(__name__).info("Bot Started!")
-
-        @bot.on(events.NewMessage(pattern='/applypromo', incoming=True, func=lambda e: e.is_private))
-        @bot.on(events.NewMessage(pattern='/promo', incoming=True, func=lambda e: e.is_private))
-        @register_user
-        async def promo_handler(event):
-            """Handle /promo <code> or /applypromo <code> command"""
-            try:
-                args = get_command_args(event.text)
-                if len(args) < 1:
-                    await event.respond("**Usage:** `/promo <code>` or `/applypromo <code>`")
-                    return
+                    LOGGER(__name__).error(f"Maintenance task failed: {e}")
                 
-                code = args[0].upper()
-                success, message = promo_manager.validate_and_apply(code, event.sender_id)
-                await event.respond(message)
-            except Exception as e:
-                await event.respond(f"❌ **Error:** {str(e)}")
+                await asyncio.sleep(1800) # 30 minutes
 
-        await bot.run_until_disconnected()
-    except KeyboardInterrupt:
-        pass
-    except Exception as err:
-        LOGGER(__name__).error(err)
-    finally:
         try:
-            await session_manager.disconnect_all()
-            LOGGER(__name__).info("Disconnected all user sessions")
-        except Exception as e:
-            LOGGER(__name__).error(f"Error disconnecting sessions: {e}")
-        LOGGER(__name__).info("Bot Stopped")
+            # Restore latest backup from GitHub on startup
+            if PyroConf.CLOUD_BACKUP_SERVICE == "github":
+                try:
+                    await restore_latest_from_cloud()
+                except Exception as e:
+                    LOGGER(__name__).error(f"Initial restore failed: {e}")
 
-if __name__ == "__main__":
+            await bot.start(bot_token=PyroConf.BOT_TOKEN)
+            await download_manager.start_processor()
+            LOGGER(__name__).info("Download queue processor initialized")
+            
+            # Start periodic backups in background
+            if PyroConf.CLOUD_BACKUP_SERVICE == "github":
+                asyncio.create_task(periodic_cloud_backup(interval_minutes=30))
+            
+            # Start cleanup tasks to prevent memory and disk leaks
+            phone_auth_handler.start_cleanup_task()
+            LOGGER(__name__).info("Phone auth cleanup task started")
+            
+            await session_manager.start_cleanup_task()
+            LOGGER(__name__).info("Session manager cleanup task started")
+            
+            asyncio.create_task(start_periodic_cleanup(interval_minutes=30))
+            LOGGER(__name__).info("Periodic file cleanup task started")
+            
+            asyncio.create_task(maintenance_task())
+            LOGGER(__name__).info("Maintenance task (RAM & Orphaned files) started")
+            
+            async def periodic_sweep():
+                """Periodically sweep stale items from download manager"""
+                while True:
+                    try:
+                        await asyncio.sleep(1800)  # Every 30 minutes
+                        result = await download_manager.sweep_stale_items(max_age_minutes=60)
+                        if result['orphaned_tasks'] > 0 or result['expired_cooldowns'] > 0:
+                            LOGGER(__name__).info(f"Sweep completed: {result}")
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as e:
+                        LOGGER(__name__).error(f"Error in periodic sweep: {e}")
+            
+            asyncio.create_task(periodic_sweep())
+            LOGGER(__name__).info("Download manager sweep task started")
+            
+            LOGGER(__name__).info("Bot Started!")
+
+            @bot.on(events.NewMessage(pattern='/applypromo', incoming=True, func=lambda e: e.is_private))
+            @bot.on(events.NewMessage(pattern='/promo', incoming=True, func=lambda e: e.is_private))
+            @register_user
+            async def promo_handler(event):
+                """Handle /promo <code> or /applypromo <code> command"""
+                try:
+                    args = get_command_args(event.text)
+                    if len(args) < 1:
+                        await event.respond("**Usage:** `/promo <code>` or `/applypromo <code>`")
+                        return
+                    
+                    code = args[0].upper()
+                    success, message = promo_manager.validate_and_apply(code, event.sender_id)
+                    await event.respond(message)
+                except Exception as e:
+                    await event.respond(f"❌ **Error:** {str(e)}")
+
+            await bot.run_until_disconnected()
+        except KeyboardInterrupt:
+            pass
+        except Exception as err:
+            LOGGER(__name__).error(err)
+        finally:
+            try:
+                await session_manager.disconnect_all()
+                LOGGER(__name__).info("Disconnected all user sessions")
+            except Exception as e:
+                LOGGER(__name__).error(f"Error disconnecting sessions: {e}")
+            LOGGER(__name__).info("Bot Stopped")
+
     import asyncio
     # Set the bot start time to filter old updates
     bot.start_time = time()
