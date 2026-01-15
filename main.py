@@ -520,7 +520,7 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                     msg += f"⚠️ Daily limit reached. Some files were skipped.\n" if files_sent < file_count else ""
                     msg += f"📊 Remaining today: 0"
                     keyboard = InlineKeyboardMarkup([
-                        [InlineKeyboardButton.callback("💰 Upgrade for Unlimited", "upgrade_premium")]
+                        [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
                     ])
                 else:
                     msg += f"📊 Remaining today: {remaining}"
