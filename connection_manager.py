@@ -1,5 +1,4 @@
 from telethon import TelegramClient
-from config import PyroConf
 from FastTelethon import download_file as fast_download, upload_file as fast_upload, ParallelTransferrer
 from logger import LOGGER
 
