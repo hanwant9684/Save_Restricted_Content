@@ -100,7 +100,7 @@ def check_download_limit(func):
             return
 
         # Check download limits
-        can_download, message_text = db.can_download(user_id)
+        can_download, message_text, remaining = db.can_download(user_id)
         if not can_download:
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
@@ -239,20 +239,7 @@ def force_subscribe(func):
                 # Get channel entity first
                 chat_entity = await client.get_entity(channel)
                 
-                # Try to get user as participant - this will raise UserNotParticipantError if not a member
-                participant = await client.get_participant(chat_entity, user_id)
-                if participant:
-                    # User is a member
-                    return await func(event)
-            except UserNotParticipantError:
-                # User is not in channel, fall through to show join message
-                pass
-            except Exception as e:
-                # If get_participant fails for other reasons, try alternative method
-                LOGGER(__name__).debug(f"get_participant failed, trying get_permissions: {e}")
-                if chat_entity is None:
-                    # If we couldn't get entity, allow access to avoid blocking
-                    return await func(event)
+                # Best way to check membership in Telethon v1.x is get_permissions
                 try:
                     # Fallback: check if user has permissions
                     permissions = await client.get_permissions(chat_entity, user_id)
@@ -261,16 +248,15 @@ def force_subscribe(func):
                         return await func(event)
                 except UserNotParticipantError:
                     pass  # User not in channel, show join message
-                except Exception as e2:
-                    LOGGER(__name__).error(f"Error checking permissions: {e2}")
-                    # If there's an error checking, allow access to avoid blocking users
+                except Exception as e:
+                    LOGGER(__name__).debug(f"get_permissions failed: {e}")
+                    # Try another way or just allow
                     return await func(event)
+            except Exception as e:
+                LOGGER(__name__).error(f"Error checking entity for subscription: {e}")
+                return await func(event)
                     
         except (ChatAdminRequiredError, ChannelPrivateError) as e:
-            LOGGER(__name__).error(f"Bot lacks permission to check channel membership: {e}")
-            # If bot can't check, allow access (don't block users due to config error)
-            return await func(event)
-        except Exception as e:
             LOGGER(__name__).error(f"Error checking channel membership: {e}")
             # If there's an error checking, allow access to avoid blocking users
             return await func(event)
