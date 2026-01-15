@@ -167,17 +167,23 @@ async def generate_thumbnail(video_path, thumb_path=None, duration=None):
     """
     Generate a thumbnail from a video file using ffmpeg.
     Simplified strategy: Try seek to 10% or middle, then fallback to first frame.
+    Also extracts duration and dimensions in a single pass for efficiency.
     """
     if thumb_path is None:
         thumb_path = video_path + ".thumb.jpg"
     
-    has_video, probe_duration, error_msg = await has_video_stream(video_path)
-    if not has_video:
-        LOGGER(__name__).info(f"Skipping thumbnail for {os.path.basename(video_path)}: {error_msg}")
-        return None
-    
-    if probe_duration and not duration:
+    # Try to get info first if not provided
+    if duration is None or duration <= 0:
+        probe_duration, _, _ = await get_media_info(video_path)
         duration = probe_duration
+    
+    # If we still don't have duration, check if it's even a video
+    if duration <= 0:
+        has_video, probe_duration, error_msg = await has_video_stream(video_path)
+        if not has_video:
+            LOGGER(__name__).info(f"Skipping thumbnail for {os.path.basename(video_path)}: {error_msg}")
+            return None
+        duration = probe_duration or 0
 
     # Seek to 5 seconds or 10% of duration
     seek_time = 5
@@ -263,11 +269,28 @@ async def get_media_info(path):
         
         # 3. Last resort: If still 0, use ffmpeg to count frames (slow but accurate)
         if duration <= 0:
-            LOGGER(__name__).info(f"Duration still 0 for {os.path.basename(path)}, trying backup method...")
-            # This is a bit heavy, but it's the most reliable way for corrupted/weird files
-            # ffmpeg -i file.mp4 -f null -
-            # but let's stick to a slightly faster ffprobe fallback first
-            pass
+            LOGGER(__name__).info(f"Duration still 0 for {os.path.basename(path)}, trying backup method with ffprobe...")
+            # Try to get duration from tags or by decoding a bit of the file
+            result_backup = await cmd_exec([
+                "ffprobe", "-v", "error", "-show_entries", "format=duration", 
+                "-of", "default=noprint_wrappers=1:nokey=1", path
+            ])
+            if result_backup[2] == 0 and result_backup[0]:
+                try:
+                    duration = float(result_backup[0])
+                except (ValueError, TypeError):
+                    pass
+        
+        # 4. Final attempt: Use ffmpeg to get duration from stderr (works when headers are missing)
+        if duration <= 0:
+            LOGGER(__name__).info(f"Duration still 0 for {os.path.basename(path)}, trying final backup with ffmpeg...")
+            # ffmpeg -i file 2>&1 | grep Duration
+            _, stderr_final, _ = await cmd_exec(["ffmpeg", "-i", path])
+            import re
+            match = re.search(r"Duration:\s(\d+):(\d+):(\d+\.\d+)", stderr_final)
+            if match:
+                h, m, s = match.groups()
+                duration = int(h) * 3600 + int(m) * 60 + float(s)
 
         # Metadata extraction
         format_tags = data.get("format", {}).get("tags", {})
@@ -579,25 +602,25 @@ async def send_media(
         
         return True
     elif media_type == "video":
-        # Get video duration and dimensions
-        duration = (await get_media_info(media_path))[0]
+        # Get video duration and metadata in one go
+        duration, artist, title = await get_media_info(media_path)
         
         # Default video dimensions
         width = 480
         height = 320
 
+        # Generate thumbnail for video (it will use the duration we just got)
+        thumb_path = await generate_thumbnail(media_path, duration=duration)
+
         # Prepare video attributes
         attributes = []
         if duration and duration > 0:
             attributes.append(DocumentAttributeVideo(
-                duration=duration,
+                duration=int(duration),
                 w=width,
                 h=height,
                 supports_streaming=True
             ))
-        
-        # Generate thumbnail for video
-        thumb_path = await generate_thumbnail(media_path, duration=duration)
         
         # Fallback to custom thumbnail if generation failed
         if not thumb_path and user_id:
