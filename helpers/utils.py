@@ -187,10 +187,12 @@ async def get_media_info(path):
             import ujson as json
             data = json.loads(stdout)
             
-            # Extract duration from format
+            # 1. Try format duration (often most stable)
             format_data = data.get("format", {})
             try:
-                duration = float(format_data.get("duration", 0))
+                d_str = format_data.get("duration")
+                if d_str and d_str != "N/A":
+                    duration = float(d_str)
             except (ValueError, TypeError):
                 pass
             
@@ -199,13 +201,14 @@ async def get_media_info(path):
             artist = tags.get("artist") or tags.get("ARTIST")
             title = tags.get("title") or tags.get("TITLE")
             
-            # Extract from streams
+            # 2. Extract from streams if format duration is missing or 0
             for stream in data.get("streams", []):
-                # Duration backup
                 if duration <= 0:
                     try:
-                        d = float(stream.get("duration", 0))
-                        if d > 0: duration = d
+                        d_str = stream.get("duration")
+                        if d_str and d_str != "N/A":
+                            d = float(d_str)
+                            if d > 0: duration = d
                     except: pass
                 
                 # Dimensions from first video stream
@@ -213,9 +216,20 @@ async def get_media_info(path):
                     width = int(stream.get("width") or width)
                     height = int(stream.get("height") or height)
 
-        # Robust fallback for duration if ffprobe JSON failed or returned 0
+        # 3. Robust fallback using ffprobe CSV mode (from old utils logic)
         if duration <= 0:
-            # Try getting duration from stderr of ffmpeg (works even for corrupted headers)
+            cmd_csv = [
+                "ffprobe", "-v", "error", "-show_entries", "format=duration", 
+                "-of", "csv=p=0", path
+            ]
+            stdout_csv, _, code_csv = await cmd_exec(cmd_csv)
+            if code_csv == 0 and stdout_csv and stdout_csv != 'N/A':
+                try:
+                    duration = float(stdout_csv)
+                except: pass
+
+        # 4. Final attempt: Use ffmpeg to get duration from stderr (works when headers are missing)
+        if duration <= 0:
             _, stderr_final, _ = await cmd_exec(["ffmpeg", "-i", path])
             import re
             match = re.search(r"Duration:\s(\d+):(\d+):(\d+\.\d+)", stderr_final)
@@ -241,7 +255,7 @@ async def generate_thumbnail(video_path, thumb_path=None, duration=None):
         duration, _, _, _, _ = await get_media_info(video_path)
 
     # 1. High Quality Strategy: Seek to 10% or middle, use high quality scaling
-    # We use -ss before -i for fast seeking, and a second -ss for accuracy if needed
+    # We use -ss before -i for fast seeking
     seek_time = 0
     if duration > 2:
         seek_time = min(5, duration * 0.1) # First 5 seconds or 10%
@@ -249,7 +263,7 @@ async def generate_thumbnail(video_path, thumb_path=None, duration=None):
     cmd_hq = [
         "ffmpeg", "-y", "-ss", str(seek_time), "-i", video_path,
         "-vframes", "1", 
-        "-vf", "scale=320:320:force_original_aspect_ratio=decrease,pad=320:320:(ow-iw)/2:(oh-ih)/2:color=black",
+        "-vf", "scale=320:-1",
         "-q:v", "2", thumb_path
     ]
     
@@ -260,7 +274,7 @@ async def generate_thumbnail(video_path, thumb_path=None, duration=None):
     # 2. Fallback: Take first available frame if seeking failed
     cmd_fallback = [
         "ffmpeg", "-y", "-i", video_path, "-vframes", "1",
-        "-vf", "scale=320:320:force_original_aspect_ratio=decrease,pad=320:320:(ow-iw)/2:(oh-ih)/2:color=black",
+        "-vf", "scale=320:-1",
         "-q:v", "5", thumb_path
     ]
     stdout, stderr, code = await cmd_exec(cmd_fallback)
