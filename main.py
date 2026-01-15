@@ -76,7 +76,6 @@ from ad_manager import ad_manager
 from cloud_backup import restore_latest_from_cloud, periodic_cloud_backup
 
 # Initialize the bot client with Telethon
-# Telethon handles connection pooling and performance optimization automatically
 bot = TelegramClient(
     'media_bot',
     PyroConf.API_ID,
@@ -84,7 +83,6 @@ bot = TelegramClient(
     device_model="Replit-HighPerf",
     system_version="Linux-Replit",
     app_version="5.0.0",
-    proxy=None,
     connection_retries=10,
     retry_delay=1,
     auto_reconnect=True,

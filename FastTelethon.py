@@ -158,11 +158,13 @@ class ParallelTransferrer:
         gc.collect(0)
 
     @staticmethod
-    def _get_connection_count(file_size: int, max_count: int = 4,
-                              full_size: int = 100 * 1024 * 1024) -> int:
-        # This method is monkeypatched by helpers/transfer.py
-        # Fallback to a safe default if not monkeypatched
-        return max_count
+    def _get_connection_count(file_size: int, max_count: int = 4) -> int:
+        """Helper to get connection count based on file size."""
+        if file_size >= 50 * 1024 * 1024:
+            return max_count
+        elif file_size >= 10 * 1024 * 1024:
+            return min(2, max_count)
+        return min(1, max_count)
 
     async def _init_download(self, connections: int, file: TypeLocation, part_count: int,
                              part_size: int) -> None:
