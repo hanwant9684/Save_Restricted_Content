@@ -212,7 +212,6 @@ async def start(event):
     is_admin = db.is_admin(event.sender_id)
 
     # Show ad forcefully for ALL users on /start if configured
-    # Note: If user hasn't accepted legal terms, this is handled in the if block above via show_legal_acceptance
     if richads.is_enabled() and (not is_user_premium or richads.for_premium):
         await richads.send_ad_to_user(bot, event.sender_id, language_code=lang_code)
 
@@ -1315,7 +1314,34 @@ async def apply_promo_handler(event):
         await event.respond(f"❌ **Error applying promo code:** {str(e)}")
         LOGGER(__name__).error(f"Error in apply_promo_handler: {e}")
 
-# Removed /getpremium and /verifypremium commands
+@bot.on(events.NewMessage(pattern='/verifypremium', incoming=True, func=lambda e: e.is_private))
+@register_user
+async def verify_premium(event):
+    """Manual verification of ad code to get free premium access for a limited time"""
+    try:
+        command = parse_command(event.text)
+        if len(command) < 2:
+            await event.respond(
+                "**Usage:** `/verifypremium <code>`\n\n"
+                "**Note:** You get this code after completing the ad verification."
+            )
+            return
+
+        verification_code = command[1].strip()
+        LOGGER(__name__).info(f"🔑 MANUAL VERIFICATION | User: {event.sender_id} | Code: {verification_code}")
+        
+        success, msg = ad_monetization.verify_code(verification_code, event.sender_id)
+        await event.respond(msg)
+        
+        if success:
+            LOGGER(__name__).info(f"✅ MANUAL VERIFICATION SUCCESS | User: {event.sender_id} | Got premium access")
+        else:
+            LOGGER(__name__).warning(f"❌ MANUAL VERIFICATION FAILED | User: {event.sender_id} | Reason: {msg}")
+            
+    except Exception as e:
+        await event.respond(f"❌ **Error verifying code:** {str(e)}")
+        LOGGER(__name__).error(f"Error in verify_premium: {e}")
+
 @bot.on(events.NewMessage(pattern='/upgrade', incoming=True, func=lambda e: e.is_private))
 @register_user
 async def upgrade_command(event):
