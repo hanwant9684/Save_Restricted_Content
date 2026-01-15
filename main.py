@@ -491,51 +491,43 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
             
             LOGGER(__name__).info(f"Media group detected with {file_count} files for user {event.sender_id}")
             
-            # Pre-flight quota check before downloading
-            if increment_usage:
-                can_dl, quota_msg = db.can_download(event.sender_id, file_count)
-                if not can_dl:
-                    keyboard = InlineKeyboardMarkup([
-                        [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
-                    ])
-                    await event.respond(quota_msg, buttons=keyboard.to_telethon())
-                    return
+            # Pre-flight quota check
+            can_dl, quota_msg, remaining = db.can_download(event.sender_id, file_count)
+            if not can_dl:
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
+                ])
+                await event.respond(quota_msg, buttons=keyboard.to_telethon())
+                return
             
-            # Download media group (pass user_client for private channel access)
+            # Download media group (partial download logic is now inside processMediaGroup)
             files_sent = await processMediaGroup(chat_message, bot_client, event, event.sender_id, user_client=client_to_use, source_url=post_url)
             
             if files_sent == 0:
-                await event.respond("**Could not extract any valid media from the media group.**")
                 return
             
-            # Increment usage by actual file count after successful download
-            if increment_usage:
-                success = db.increment_usage(event.sender_id, files_sent)
-                if not success:
-                    LOGGER(__name__).error(f"Failed to increment usage for user {event.sender_id} after media group download")
-                
-                # Show completion message based on user type
-                user_type = db.get_user_type(event.sender_id)
-                if user_type == 'free':
-                    # Free users: show buttons for ads and upgrade with remaining downloads count
-                    # Get both ad downloads and daily free downloads, add them together
-                    remaining = db.get_free_downloads_remaining(event.sender_id)
-                    total_left = remaining['total']  # ad_downloads + daily_remaining
-                    
-                    upgrade_keyboard = InlineKeyboardMarkup([
-                        [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
-                    ])
-                    
-                    remaining_msg = f"\n📊 **{total_left} free download(s) remaining**" if total_left > 0 else "\n📊 **0 free downloads remaining**"
-                    
-                    await event.respond(
-                        f"✅ **Download complete**{remaining_msg}",
-                        buttons=upgrade_keyboard.to_telethon()
-                    )
-                else:
-                    # Premium/Admin users: simple completion message without buttons
-                    await event.respond("✅ **Download complete**")
+            # Increment usage by actual file count
+            db.increment_usage(event.sender_id, files_sent)
             
+            # Show completion status for free users ONLY
+            user_type = db.get_user_type(event.sender_id)
+            if user_type == 'free':
+                can_dl, _, remaining = db.can_download(event.sender_id)
+                msg = f"✅ **Successfully sent {files_sent} files from the group.**\n"
+                
+                keyboard = None
+                if files_sent < file_count or remaining <= 0:
+                    msg += f"⚠️ Daily limit reached. Some files were skipped.\n" if files_sent < file_count else ""
+                    msg += f"📊 Remaining today: 0"
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton.callback("💰 Upgrade for Unlimited", "upgrade_premium")]
+                    ])
+                else:
+                    msg += f"📊 Remaining today: {remaining}"
+                
+                await event.respond(msg, buttons=keyboard.to_telethon() if keyboard else None)
+            else:
+                await event.respond("✅ **Download complete**")
             return
 
         elif chat_message.media:
@@ -603,19 +595,20 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                     
                     user_type = db.get_user_type(event.sender_id)
                     if user_type == 'free':
-                        # Get both ad downloads and daily free downloads, add them together
-                        remaining = db.get_free_downloads_remaining(event.sender_id)
-                        total_left = remaining['total']  # ad_downloads + daily_remaining
-                        
-                        upgrade_markup = InlineKeyboardMarkup([
-                            [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
-                        ])
+                        # Get remaining quota
+                        can_dl, _, total_left = db.can_download(event.sender_id)
                         
                         remaining_msg = f"\n📊 **{total_left} free download(s) remaining**" if total_left > 0 else "\n📊 **0 free downloads remaining**"
                         
+                        keyboard = None
+                        if total_left <= 0:
+                            keyboard = InlineKeyboardMarkup([
+                                [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
+                            ])
+                        
                         await event.respond(
                             f"✅ **Download complete**{remaining_msg}",
-                            buttons=upgrade_markup.to_telethon()
+                            buttons=keyboard.to_telethon() if keyboard else None
                         )
                     else:
                         await event.respond("✅ **Download complete**")
