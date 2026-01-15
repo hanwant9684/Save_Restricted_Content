@@ -977,7 +977,6 @@ async def processMediaGroup(chat_message, bot, message, user_id=None, user_clien
     gc.collect()
     
     total_files = len(message_ids)
-    files_sent_count = 0
     
     # Determine user tier once for all files (avoid blocking DB calls in loop)
     is_premium = False
@@ -988,9 +987,22 @@ async def processMediaGroup(chat_message, bot, message, user_id=None, user_clien
             is_premium = user_type in ['paid', 'admin']
         except Exception as e:
             LOGGER(__name__).warning(f"Could not determine user tier, using free tier: {e}")
+
+    # Slice message_ids based on remaining quota for free users ONLY
+    original_total = total_files
+    if not is_premium:
+        from database_sqlite import db
+        can_dl, _, remaining_quota = db.can_download(user_id) if user_id else (True, "", 9999)
+        if remaining_quota < total_files:
+            message_ids = message_ids[:remaining_quota]
+            total_files = len(message_ids)
+            LOGGER(__name__).info(f"Partial download: Free user {user_id} has {remaining_quota} quota, slicing {original_total} items to {total_files}")
     
+    files_sent_count = 0
+    
+    # ... rest of the setup ...
     start_time = time()
-    progress_message = await message.reply(f"📥 Processing media group ({total_files} files)...")
+    progress_message = await message.reply(f"📥 Processing media group ({total_files} files)..." if total_files == original_total else f"📥 Processing media group (Partial: {total_files}/{original_total} files based on quota)...")
     LOGGER(__name__).info(
         f"Processing media group with {total_files} items (one-at-a-time mode for low RAM usage)..."
     )
