@@ -1435,6 +1435,11 @@ async def callback_handler(event):
     # Removed get_free_premium, watch_ad_now, and /getpremium command logic
     await broadcast_callback_handler(event)
 
+@bot.on(events.CallbackQuery(data=b"upgrade_premium"))
+async def upgrade_premium_callback(event):
+    """Handle callback for Upgrade to Premium button"""
+    await upgrade_command(event)
+
 # Queue processor will be started by server_wsgi.py using asyncio (not threading)
 # This avoids duplicate initialization and saves RAM by not creating extra threads
 
