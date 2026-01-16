@@ -1354,7 +1354,7 @@ async def upgrade_command(event):
     )
     
     # Add payment information if configured
-    payment_methods_available = PyroConf.PAYPAL_URL or PyroConf.UPI_ID or PyroConf.TELEGRAM_TON or PyroConf.CRYPTO_ADDRESS or PyroConf.CREDIT_DEBIT_CARD
+    payment_methods_available = PyroConf.PAYPAL_URL or PyroConf.UPI_ID or PyroConf.TELEGRAM_TON or PyroConf.CRYPTO_ADDRESS or PyroConf.CREDIT_CARD
     
     if payment_methods_available:
         upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n\n"
@@ -1371,8 +1371,8 @@ async def upgrade_command(event):
         if PyroConf.CRYPTO_ADDRESS:
             upgrade_text += f" ₿ **Binance (USDT/BTC/ETH):** `{PyroConf.CRYPTO_ADDRESS}`\n\n"
        
-        if PyroConf.CREDIT_DEBIT_CARD:  
-            upgrade_text += f" 💳 **Credit/Debit Card:** {PyroConf.CREDIT_DEBIT_CARD}\n\"
+        if PyroConf.CREDIT_CARD:  
+            upgrade_text += f" 💳 **Credit/Debit Card:** {PyroConf.CREDIT_CARD}\n\"
             
         upgrade_text += "\n"
     
