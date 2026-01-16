@@ -1371,7 +1371,7 @@ async def upgrade_command(event):
         if PyroConf.CRYPTO_ADDRESS:
             upgrade_text += f" ₿ **Binance (USDT/BTC/ETH):** `{PyroConf.CRYPTO_ADDRESS}`\n\n"
         
-       if PyroConf.CREDIT_CARD:
+        if PyroConf.CREDIT_CARD:
             upgrade_text += f" 💳 **Credit/Debit Card:** {PyroConf.CREDIT_CARD}\n\n"     
             
         upgrade_text += "\n"
