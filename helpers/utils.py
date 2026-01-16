@@ -165,125 +165,221 @@ async def create_placeholder_thumbnail(thumb_path, width=320, height=240):
 
 async def generate_thumbnail(video_path, thumb_path=None, duration=None):
     """
-    Generate thumbnail from video using FFmpeg with high precision and dynamic timeouts.
-    Uses -q:v 2 for best quality and optimized scaling.
+    Generate a thumbnail from a video file using ffmpeg.
+    Multi-strategy approach with position-based extraction and smart fallback.
+    Covers virtually all video files with graceful degradation.
+    
+    Args:
+        video_path: Path to the video file
+        thumb_path: Optional path for thumbnail. If None, uses video_path + ".jpg"
+        duration: Optional video duration in seconds (for calculating middle frame)
+    
+    Returns:
+        str: Path to generated thumbnail, or None if failed
     """
     if thumb_path is None:
-        thumb_path = video_path + "_thumb.jpg"
+        thumb_path = video_path + ".thumb.jpg"
     
-    # Dynamic timeout based on file size (from old utils logic)
-    # This prevents timeouts on large files in resource-constrained environments
+    has_video, probe_duration, error_msg = await has_video_stream(video_path)
+    if not has_video:
+        LOGGER(__name__).info(f"Skipping thumbnail for {os.path.basename(video_path)}: {error_msg}")
+        return None
+    
+    if probe_duration and not duration:
+        duration = probe_duration
+    
     file_size = 0
     try:
         file_size = os.path.getsize(video_path)
-    except: pass
-    
-    timeout = 15.0
-    if file_size > 100 * 1024 * 1024: # > 100MB
-        timeout = 25.0
-    if file_size > 500 * 1024 * 1024: # > 500MB
-        timeout = 40.0
-
-    # Extract frame at 5 seconds (or middle if shorter)
-    seek_time = 5
-    if duration and duration < 5:
-        seek_time = duration / 2
-
-    try:
-        cmd = [
-            "ffmpeg", "-y",
-            "-ss", str(seek_time),
-            "-i", video_path,
-            "-vframes", "1",
-            "-q:v", "2",
-            "-vf", "scale=320:-1",
-            thumb_path
-        ]
-        
-        # Use subprocess with timeout to prevent hanging
-        proc = await create_subprocess_exec(*cmd, stdout=PIPE, stderr=PIPE)
-        try:
-            await wait_for(proc.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
-            if proc:
-                try: proc.kill()
-                except: pass
-            LOGGER(__name__).warning(f"Thumbnail generation timed out after {timeout}s for {os.path.basename(video_path)}")
-        
-        if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
-            return thumb_path
-            
     except Exception as e:
-        LOGGER(__name__).error(f"Thumbnail generation failed: {e}")
+        LOGGER(__name__).debug(f"Could not determine file size: {e}")
     
-    return await create_placeholder_thumbnail(thumb_path)
+    base_timeout = 10.0
+    if file_size > 100 * 1024 * 1024:
+        base_timeout = 20.0
+    if file_size > 500 * 1024 * 1024:
+        base_timeout = 30.0
+    
+    seek_positions = [0]
+    if duration and duration > 1:
+        seek_positions = [
+            0,
+            int(duration * 0.25),
+            int(duration * 0.5),
+            int(duration * 0.75)
+        ]
+    
+    strategies = []
+    
+    for pos_idx, seek_time in enumerate(seek_positions):
+        for strategy_type in ["standard", "thumbnail_filter", "first_frame"]:
+            if strategy_type == "standard":
+                strategies.append({
+                    "name": f"standard_pos{pos_idx}",
+                    "cmd": [
+                        "ffmpeg", "-y", "-ss", str(seek_time), "-i", video_path,
+                        "-vframes", "1", "-vf", "scale=320:-1", "-q:v", "5", thumb_path
+                    ],
+                    "timeout": base_timeout
+                })
+            elif strategy_type == "thumbnail_filter":
+                if pos_idx == 0:
+                    strategies.append({
+                        "name": "thumbnail_filter",
+                        "cmd": [
+                            "ffmpeg", "-y", "-i", video_path,
+                            "-vf", "thumbnail,scale=320:-1", "-frames:v", "1", "-q:v", "5", thumb_path
+                        ],
+                        "timeout": base_timeout * 1.5
+                    })
+            elif strategy_type == "first_frame":
+                if pos_idx == 0:
+                    strategies.append({
+                        "name": "first_frame",
+                        "cmd": [
+                            "ffmpeg", "-y", "-analyzeduration", "20M", "-probesize", "20M",
+                            "-i", video_path, "-ss", "0", "-vframes", "1",
+                            "-vf", "scale=320:-1", "-q:v", "5", thumb_path
+                        ],
+                        "timeout": base_timeout * 2
+                    })
+    
+    strategies.append({
+        "name": "no_filter",
+        "cmd": [
+            "ffmpeg", "-y", "-i", video_path,
+            "-vframes", "1", "-q:v", "5", thumb_path
+        ],
+        "timeout": base_timeout * 1.5
+    })
+    
+    for strategy in strategies:
+        proc = None
+        try:
+            proc = await create_subprocess_exec(*strategy["cmd"], stdout=PIPE, stderr=PIPE)
+            
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=strategy["timeout"])
+            except asyncio.TimeoutError:
+                LOGGER(__name__).debug(f"Thumbnail '{strategy['name']}' timed out ({strategy['timeout']}s)")
+                if proc:
+                    try:
+                        proc.kill()
+                        await asyncio.wait_for(proc.wait(), timeout=3.0)
+                    except Exception as kill_err:
+                        LOGGER(__name__).debug(f"Error killing process: {kill_err}")
+                continue
+            
+            if proc.returncode == 0:
+                try:
+                    if os.path.exists(thumb_path):
+                        thumb_size = os.path.getsize(thumb_path)
+                        if thumb_size > 0:
+                            LOGGER(__name__).debug(f"Thumbnail generated: {strategy['name']}")
+                            return thumb_path
+                        else:
+                            try:
+                                os.remove(thumb_path)
+                            except:
+                                pass
+                except OSError as e:
+                    LOGGER(__name__).debug(f"File check error: {e}")
+            else:
+                stderr_str = stderr.decode().strip() if stderr else ""
+                if stderr_str and len(stderr_str) > 0:
+                    LOGGER(__name__).debug(f"Strategy '{strategy['name']}' failed: {stderr_str[:50]}")
+                    
+        except Exception as e:
+            LOGGER(__name__).debug(f"Strategy '{strategy['name']}' error: {type(e).__name__}")
+            if proc:
+                try:
+                    if proc.returncode is None:
+                        proc.kill()
+                        await asyncio.wait_for(proc.wait(), timeout=2.0)
+                except:
+                    pass
+        finally:
+            if proc and proc.returncode is None:
+                try:
+                    proc.kill()
+                    await asyncio.wait_for(proc.wait(), timeout=2.0)
+                except Exception as cleanup_err:
+                    LOGGER(__name__).debug(f"Process cleanup error: {cleanup_err}")
+                finally:
+                    proc = None
+    
+    LOGGER(__name__).debug(f"All strategies failed, creating placeholder")
+    placeholder = await create_placeholder_thumbnail(thumb_path)
+    if placeholder:
+        LOGGER(__name__).debug(f"Using placeholder thumbnail for {os.path.basename(video_path)}")
+        return placeholder
+    
+    LOGGER(__name__).warning(f"Thumbnail generation completely failed: {os.path.basename(video_path)}")
+    try:
+        if os.path.exists(thumb_path):
+            os.remove(thumb_path)
+    except:
+        pass
+    return None
 
 
 async def get_media_info(path):
-    """
-    Extract media info with multi-stage fallback for 100% accuracy.
-    Matches logic from devgaganin repo for stability.
-    """
-    duration = 0
-    artist = None
-    title = None
-    width = 480
-    height = 320
-    
     try:
-        # Stage 1: Fast JSON probe
-        cmd = [
-            "ffprobe", "-v", "quiet", "-hide_banner",
-            "-show_entries", "format=duration,tags:stream=duration,width,height,codec_type",
-            "-print_format", "json", path
-        ]
-        stdout, stderr, code = await cmd_exec(cmd)
-        
-        if code == 0 and stdout:
-            import ujson as json
-            data = json.loads(stdout)
-            
-            # Format info
-            f_data = data.get("format", {})
-            duration = float(f_data.get("duration") or 0)
-            tags = f_data.get("tags", {})
-            artist = tags.get("artist") or tags.get("ARTIST")
-            title = tags.get("title") or tags.get("TITLE")
-            
-            # Stream info
-            for s in data.get("streams", []):
-                if duration <= 0:
-                    duration = float(s.get("duration") or 0)
-                if s.get("codec_type") == "video":
-                    width = int(s.get("width") or width)
-                    height = int(s.get("height") or height)
-
-        # Stage 2: Aggressive duration detection (Stderr match)
-        if duration <= 0:
-            _, stderr, _ = await cmd_exec(["ffmpeg", "-i", path])
-            import re
-            match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+|\d+)", stderr)
-            if match:
-                h, m, s = match.groups()
-                duration = int(h) * 3600 + int(m) * 60 + float(s)
-
-        # Stage 3: Packet-level PTS detection (Deep scan)
-        if duration <= 0:
-            cmd_pts = [
-                "ffprobe", "-v", "error", "-select_streams", "v:0",
-                "-show_entries", "packet=pts_time", "-of", "compact=p=0:nk=1", path
-            ]
-            pts_out, _, _ = await cmd_exec(cmd_pts)
-            if pts_out:
-                lines = pts_out.strip().split('\n')
-                if lines:
-                    try: duration = float(lines[-1])
-                    except: pass
-
+        result = await cmd_exec([
+            "ffprobe", "-hide_banner", "-loglevel", "error",
+            "-print_format", "json", "-show_format", "-show_streams", path,
+        ])
     except Exception as e:
-        LOGGER(__name__).error(f"Metadata extraction failed: {e}")
+        print(f"Get Media Info: {e}. Mostly File not found! - File: {path}")
+        return 0, None, None
     
-    return round(duration), artist, title, width, height
+    if result[0] and result[2] == 0:
+        try:
+            try:
+                import orjson
+                data = orjson.loads(result[0])
+            except ImportError:
+                import json
+                data = json.loads(result[0])
+        except Exception as e:
+            LOGGER(__name__).error(f"Failed to parse ffprobe JSON: {e}")
+            return 0, None, None
+        
+        duration = 0
+        artist = None
+        title = None
+        
+        # Try to get duration from format first
+        format_info = data.get("format", {})
+        if format_info:
+            try:
+                duration_str = format_info.get("duration", "0")
+                if duration_str and duration_str != "N/A":
+                    duration = round(float(duration_str))
+            except (ValueError, TypeError):
+                pass
+            
+            # Get tags from format
+            tags = format_info.get("tags", {})
+            artist = tags.get("artist") or tags.get("ARTIST") or tags.get("Artist")
+            title = tags.get("title") or tags.get("TITLE") or tags.get("Title")
+        
+        # If format duration is 0 or missing, try to get from video stream
+        if duration == 0:
+            streams = data.get("streams", [])
+            for stream in streams:
+                if stream.get("codec_type") == "video":
+                    try:
+                        stream_duration = stream.get("duration")
+                        if stream_duration and stream_duration != "N/A":
+                            duration = round(float(stream_duration))
+                            LOGGER(__name__).info(f"Got duration from video stream: {duration}s")
+                            break
+                    except (ValueError, TypeError):
+                        continue
+        
+        return duration, artist, title
+    return 0, None, None
 
 
 # Progress Throttle Helper to prevent Telegram API rate limits
@@ -587,23 +683,27 @@ async def send_media(
         
         return True
     elif media_type == "video":
-        # Get video duration, metadata, and dimensions in one highly optimized go
-        duration, artist, title, width, height = await get_media_info(media_path)
+        # Get video duration and dimensions
+        duration = (await get_media_info(media_path))[0]
         
-        # Generate high-quality thumbnail (will use the duration we just extracted)
-        thumb_path = await generate_thumbnail(media_path, duration=duration)
+        # Default video dimensions
+        width = 480
+        height = 320
 
-        # Prepare video attributes with precise info
+        # Prepare video attributes
         attributes = []
         if duration and duration > 0:
             attributes.append(DocumentAttributeVideo(
-                duration=int(duration),
+                duration=duration,
                 w=width,
                 h=height,
                 supports_streaming=True
             ))
         
-        # Final fallback for thumbnail if generation failed
+        # Generate thumbnail for video
+        thumb_path = await generate_thumbnail(media_path, duration=duration)
+        
+        # Fallback to custom thumbnail if generation failed
         if not thumb_path and user_id:
             from database_sqlite import db
             user_data = db.get_user(user_id)
@@ -659,16 +759,15 @@ async def send_media(
         
         return True
     elif media_type == "audio":
-        # Get audio metadata including duration, artist, and title
-        duration, artist, title, _, _ = await get_media_info(media_path)
+        duration, artist, title = await get_media_info(media_path)
         
-        # Prepare audio attributes with high precision
+        # Prepare audio attributes
         attributes = []
         if duration and duration > 0:
             attributes.append(DocumentAttributeAudio(
-                duration=int(duration),
-                performer=artist or "Bot",
-                title=title or os.path.basename(media_path),
+                duration=duration,
+                performer=artist,
+                title=title,
                 voice=False
             ))
         
