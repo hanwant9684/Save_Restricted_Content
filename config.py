@@ -64,6 +64,7 @@ class PyroConf:
     UPI_ID = os.getenv("UPI_ID", "")
     TELEGRAM_TON= os.getenv("TELEGRAM_TON", "")
     CRYPTO_ADDRESS = os.getenv("CRYPTO_ADDRESS", "")
+    CREDIT_DEBIT_CARD = os.getenv("CREDIT_DEBIT_CARD", "")
     
     # Ad Monetization - Droplink.co
     # API key is stored in .env file (DROPLINK_API_KEY)

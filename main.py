@@ -1354,23 +1354,26 @@ async def upgrade_command(event):
     )
     
     # Add payment information if configured
-    payment_methods_available = PyroConf.PAYPAL_URL or PyroConf.UPI_ID or PyroConf.TELEGRAM_TON or PyroConf.CRYPTO_ADDRESS
+    payment_methods_available = PyroConf.PAYPAL_URL or PyroConf.UPI_ID or PyroConf.TELEGRAM_TON or PyroConf.CRYPTO_ADDRESS or PyroConf.CREDIT_DEBIT_CARD
     
     if payment_methods_available:
         upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n\n"
         
         if PyroConf.PAYPAL_URL:
-            upgrade_text += f"   💳 **PayPal:** {PyroConf.PAYPAL_URL}\n\n"
+            upgrade_text += f" 💳 **PayPal:** {PyroConf.PAYPAL_URL}\n\n"
         
         if PyroConf.UPI_ID:
-            upgrade_text += f"   📱 **UPI (India):** `{PyroConf.UPI_ID}`\n\n"
+            upgrade_text += f" 📱 **UPI (India):** `{PyroConf.UPI_ID}`\n\n"
         
         if PyroConf.TELEGRAM_TON:
-            upgrade_text += f"   🛒 **Telegram Pay (TON):** `{PyroConf.TELEGRAM_TON}`\n\n"
+            upgrade_text += f" 🛒 **Telegram Pay (TON):** `{PyroConf.TELEGRAM_TON}`\n\n"
         
         if PyroConf.CRYPTO_ADDRESS:
-            upgrade_text += f"   ₿ **Crypto (USDT/BTC/ETH):** `{PyroConf.CRYPTO_ADDRESS}`\n"
-        
+            upgrade_text += f" ₿ **Binance (USDT/BTC/ETH):** `{PyroConf.CRYPTO_ADDRESS}`\n\n"
+       
+        if PyroConf.CREDIT_DEBIT_CARD:  
+            upgrade_text += f" 💳 **Credit/Debit Card:** {PyroConf.CREDIT_DEBIT_CARD}\n\"
+            
         upgrade_text += "\n"
     
     # Add contact information
