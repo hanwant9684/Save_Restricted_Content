@@ -226,11 +226,18 @@ async def start(event):
         "**Step 3:** Start downloading!\n"
         "   📥 Just paste any Telegram link\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "💰 **Premium Access ($2/month)**\n"
-        "   ⭐ 7/15/30 days unlimited access\n"
-        "   🚀 Priority downloads\n"
-        "   📦 Batch download support upto**(200)**\n"
-        "   👉 Use: `/upgrade`\n\n"
+        "👑 **Premium Access ($2/month)**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "⭐ 7/15/30 days unlimited access\n"
+        "🚀 Priority downloads\n"
+        "📦 Batch download support (up to 200)\n"
+        "✨ No daily limits or ads\n\n"
+        "💳 **Payment Methods:**\n"
+        "╭━━━━━━━━━━━━━━━━━━━━━━━━╮\n"
+        "  🅿️ PayPal  •  🏦 UPI  •  💳 Card\n"
+        "  💰 TON     •  🪙 Crypto\n"
+        "╰━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n"
+        "👉 Use: `/upgrade` to subscribe\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "ℹ️ **Need help?** Use `/help` for all commands\n\n"
         "🔑 **Ready to start?** Login now with `/login <phone>`"
@@ -300,11 +307,17 @@ async def help_command(event):
             "   📊 5 downloads per day\n"
             "   ❌ No batch downloads\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "💰 **Paid Premium ($2/month):**\n"
+            "👑 **Premium Plans ($2/month):**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "   `/upgrade` - View payment options\n"
             "   ⭐ 7/15/30 days unlimited access\n"
             "   🚀 Priority downloads\n"
-            "   📦 Batch download support upto**(200)**\n\n"
+            "   📦 Batch download (up to 200)\n\n"
+            "💰 **Accepted Payments:**\n"
+            "╭━━━━━━━━━━━━━━━━━━━━━━╮\n"
+            "  🅿️ PayPal • 🏦 UPI • 💳 Card\n"
+            "  💰 TON    • 🪙 Crypto\n"
+            "╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "📊 **Download Status:**\n\n"
             "   `/status` - Check your download status\n"
@@ -1340,53 +1353,55 @@ async def verify_premium(event):
 async def upgrade_command(event):
     """Show premium upgrade information with pricing and payment details"""
     upgrade_text = (
-        "💎 **Upgrade to Premium**\n\n"
-        "**Premium Features:**\n"
-        "✅ Unlimited downloads per day\n"
-        "✅ Batch download support (/bdl command)\n"
-        "✅ Download up to 200 posts at once\n"
-        "✅ Priority support\n"
-        "✅ No daily limits\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "**💰 Option: Monthly Subscription**\n"
-        "💵 **7/15/30 Days Premium = $1/$1.5/$2 USD**\n\n"
-        "**How to Subscribe:**\n"
+        "💎 **PREMIUM UPGRADE DASHBOARD**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "🚀 **Unlock Professional Features:**\n"
+        "✅ **Unlimited** daily downloads\n"
+        "✅ **Batch** download support (/bdl)\n"
+        "✅ Download up to **200 posts** at once\n"
+        "✅ **Priority** high-speed servers\n"
+        "✅ **Zero** ads & daily limits\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "💰 **Pricing Plans:**\n"
+        "• 7 Days:  **$1.00**\n"
+        "• 15 Days: **$1.50**\n"
+        "• 30 Days: **$2.00**\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "💳 **Choose Payment Method:**\n"
     )
     
     # Add payment information if configured
     payment_methods_available = PyroConf.PAYPAL_URL or PyroConf.UPI_ID or PyroConf.TELEGRAM_TON or PyroConf.CRYPTO_ADDRESS or PyroConf.CREDIT_CARD
     
     if payment_methods_available:
-        upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n\n"
-        
+        methods = []
         if PyroConf.PAYPAL_URL:
-            upgrade_text += f" 💳 **PayPal:** {PyroConf.PAYPAL_URL}\n\n"
+            methods.append(f"  🅿️ **PayPal:**\n  └ {PyroConf.PAYPAL_URL}")
         
         if PyroConf.UPI_ID:
-            upgrade_text += f" 📱 **UPI (India):** `{PyroConf.UPI_ID}`\n\n"
+            methods.append(f"  🏦 **UPI (India):**\n  └ `{PyroConf.UPI_ID}`")
         
         if PyroConf.TELEGRAM_TON:
-            upgrade_text += f" 🛒 **Telegram Pay (TON):** `{PyroConf.TELEGRAM_TON}`\n\n"
+            methods.append(f"  💎 **TON (Telegram):**\n  └ `{PyroConf.TELEGRAM_TON}`")
         
         if PyroConf.CRYPTO_ADDRESS:
-            upgrade_text += f" ₿ **Binance (USDT/BTC/ETH):** `{PyroConf.CRYPTO_ADDRESS}`\n\n"
+            methods.append(f"  🪙 **Crypto (Binance/USDT):**\n  └ `{PyroConf.CRYPTO_ADDRESS}`")
         
         if PyroConf.CREDIT_CARD:
-            upgrade_text += f" 💳 **Credit/Debit Card:** {PyroConf.CREDIT_CARD}\n\n"     
-            
-        upgrade_text += "\n"
+            methods.append(f"  💳 **Credit/Debit Card:**\n  └ {PyroConf.CREDIT_CARD}")
+        
+        upgrade_text += "\n" + "\n\n".join(methods) + "\n\n"
+    
+    upgrade_text += "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
     
     # Add contact information
-    if PyroConf.ADMIN_USERNAME:
-        upgrade_text += f"2️⃣ **Contact Admin:**\n   👤 @{PyroConf.ADMIN_USERNAME}\n\n"
-    else:
-        upgrade_text += f"2️⃣ **Contact Admin:**\n   👤 Contact the bot owner\n\n"
-    
+    admin = f"@{PyroConf.ADMIN_USERNAME}" if PyroConf.ADMIN_USERNAME else "the bot owner"
     upgrade_text += (
-        "3️⃣ **Send Payment Proof:**\n"
-        "   Send screenshot/transaction ID to admin\n\n"
-        "4️⃣ **Get Activated:**\n"
-        "   Admin will activate your premium within 24 hours!"
+        "📝 **How to Activate:**\n"
+        f"1️⃣ Pay the amount via your preferred method\n"
+        f"2️⃣ Send payment proof to 👤 {admin}\n"
+        "3️⃣ Your account will be upgraded within 24h!\n\n"
+        "✨ *Join our premium family today!*"
     )
     
     await event.respond(upgrade_text, link_preview=False)
