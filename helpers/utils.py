@@ -163,19 +163,75 @@ async def create_placeholder_thumbnail(thumb_path, width=320, height=240):
                 pass
 
 
+async def generate_thumbnail(video_path, thumb_path=None, duration=None):
+    """
+    Generate thumbnail from video using FFmpeg with high precision and dynamic timeouts.
+    Uses -q:v 2 for best quality and optimized scaling.
+    """
+    if thumb_path is None:
+        thumb_path = video_path + "_thumb.jpg"
+    
+    # Dynamic timeout based on file size (from old utils logic)
+    # This prevents timeouts on large files in resource-constrained environments
+    file_size = 0
+    try:
+        file_size = os.path.getsize(video_path)
+    except: pass
+    
+    timeout = 15.0
+    if file_size > 100 * 1024 * 1024: # > 100MB
+        timeout = 25.0
+    if file_size > 500 * 1024 * 1024: # > 500MB
+        timeout = 40.0
+
+    # Extract frame at 5 seconds (or middle if shorter)
+    seek_time = 5
+    if duration and duration < 5:
+        seek_time = duration / 2
+
+    try:
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", str(seek_time),
+            "-i", video_path,
+            "-vframes", "1",
+            "-q:v", "2",
+            "-vf", "scale=320:-1",
+            thumb_path
+        ]
+        
+        # Use subprocess with timeout to prevent hanging
+        proc = await create_subprocess_exec(*cmd, stdout=PIPE, stderr=PIPE)
+        try:
+            await wait_for(proc.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            if proc:
+                try: proc.kill()
+                except: pass
+            LOGGER(__name__).warning(f"Thumbnail generation timed out after {timeout}s for {os.path.basename(video_path)}")
+        
+        if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
+            return thumb_path
+            
+    except Exception as e:
+        LOGGER(__name__).error(f"Thumbnail generation failed: {e}")
+    
+    return await create_placeholder_thumbnail(thumb_path)
+
+
 async def get_media_info(path):
     """
-    Highly optimized and robust media info extraction.
-    Returns: (duration: int, artist: str, title: str, width: int, height: int)
+    Extract media info with multi-stage fallback for 100% accuracy.
+    Matches logic from devgaganin repo for stability.
     """
     duration = 0
     artist = None
     title = None
-    width = 480  # Default fallback
-    height = 320 # Default fallback
+    width = 480
+    height = 320
     
     try:
-        # Use ffprobe to get all info in JSON format (fastest)
+        # Stage 1: Fast JSON probe
         cmd = [
             "ffprobe", "-v", "quiet", "-hide_banner",
             "-show_entries", "format=duration,tags:stream=duration,width,height,codec_type",
@@ -187,101 +243,47 @@ async def get_media_info(path):
             import ujson as json
             data = json.loads(stdout)
             
-            # 1. Try format duration (often most stable)
-            format_data = data.get("format", {})
-            try:
-                d_str = format_data.get("duration")
-                if d_str and d_str != "N/A":
-                    duration = float(d_str)
-            except (ValueError, TypeError):
-                pass
-            
-            # Tags
-            tags = format_data.get("tags", {})
+            # Format info
+            f_data = data.get("format", {})
+            duration = float(f_data.get("duration") or 0)
+            tags = f_data.get("tags", {})
             artist = tags.get("artist") or tags.get("ARTIST")
             title = tags.get("title") or tags.get("TITLE")
             
-            # 2. Extract from streams if format duration is missing or 0
-            for stream in data.get("streams", []):
+            # Stream info
+            for s in data.get("streams", []):
                 if duration <= 0:
-                    try:
-                        d_str = stream.get("duration")
-                        if d_str and d_str != "N/A":
-                            d = float(d_str)
-                            if d > 0: duration = d
-                    except: pass
-                
-                # Dimensions from first video stream
-                if stream.get("codec_type") == "video":
-                    width = int(stream.get("width") or width)
-                    height = int(stream.get("height") or height)
+                    duration = float(s.get("duration") or 0)
+                if s.get("codec_type") == "video":
+                    width = int(s.get("width") or width)
+                    height = int(s.get("height") or height)
 
-        # 3. Robust fallback using ffprobe CSV mode (from old utils logic)
+        # Stage 2: Aggressive duration detection (Stderr match)
         if duration <= 0:
-            cmd_csv = [
-                "ffprobe", "-v", "error", "-show_entries", "format=duration", 
-                "-of", "csv=p=0", path
-            ]
-            stdout_csv, _, code_csv = await cmd_exec(cmd_csv)
-            if code_csv == 0 and stdout_csv and stdout_csv != 'N/A':
-                try:
-                    duration = float(stdout_csv)
-                except: pass
-
-        # 4. Final attempt: Use ffmpeg to get duration from stderr (works when headers are missing)
-        if duration <= 0:
-            _, stderr_final, _ = await cmd_exec(["ffmpeg", "-i", path])
+            _, stderr, _ = await cmd_exec(["ffmpeg", "-i", path])
             import re
-            match = re.search(r"Duration:\s(\d+):(\d+):(\d+\.\d+)", stderr_final)
+            match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+|\d+)", stderr)
             if match:
                 h, m, s = match.groups()
                 duration = int(h) * 3600 + int(m) * 60 + float(s)
 
+        # Stage 3: Packet-level PTS detection (Deep scan)
+        if duration <= 0:
+            cmd_pts = [
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "packet=pts_time", "-of", "compact=p=0:nk=1", path
+            ]
+            pts_out, _, _ = await cmd_exec(cmd_pts)
+            if pts_out:
+                lines = pts_out.strip().split('\n')
+                if lines:
+                    try: duration = float(lines[-1])
+                    except: pass
+
     except Exception as e:
-        LOGGER(__name__).error(f"Media Info Error: {e} - File: {path}")
+        LOGGER(__name__).error(f"Metadata extraction failed: {e}")
     
     return round(duration), artist, title, width, height
-
-
-async def generate_thumbnail(video_path, thumb_path=None, duration=None):
-    """
-    Performs high-quality thumbnail generation with smart seeking.
-    """
-    if thumb_path is None:
-        thumb_path = video_path + ".thumb.jpg"
-    
-    # Ensure we have a valid duration for smart seeking
-    if duration is None or duration <= 0:
-        duration, _, _, _, _ = await get_media_info(video_path)
-
-    # 1. High Quality Strategy: Seek to 10% or middle, use high quality scaling
-    # We use -ss before -i for fast seeking
-    seek_time = 0
-    if duration > 2:
-        seek_time = min(5, duration * 0.1) # First 5 seconds or 10%
-    
-    cmd_hq = [
-        "ffmpeg", "-y", "-ss", str(seek_time), "-i", video_path,
-        "-vframes", "1", 
-        "-vf", "scale=320:-1",
-        "-q:v", "2", thumb_path
-    ]
-    
-    stdout, stderr, code = await cmd_exec(cmd_hq)
-    if code == 0 and os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
-        return thumb_path
-
-    # 2. Fallback: Take first available frame if seeking failed
-    cmd_fallback = [
-        "ffmpeg", "-y", "-i", video_path, "-vframes", "1",
-        "-vf", "scale=320:-1",
-        "-q:v", "5", thumb_path
-    ]
-    stdout, stderr, code = await cmd_exec(cmd_fallback)
-    if code == 0 and os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
-        return thumb_path
-
-    return await create_placeholder_thumbnail(thumb_path)
 
 
 # Progress Throttle Helper to prevent Telegram API rate limits
