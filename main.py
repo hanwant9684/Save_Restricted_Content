@@ -1358,21 +1358,22 @@ async def upgrade_command(event):
     
     if payment_methods_available:
         upgrade_text += "1️⃣ **Make Payment (Choose any method):**\n\n"
-        
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
         if PyroConf.PAYPAL_URL:
             upgrade_text += f" 💳 **PayPal:** {PyroConf.PAYPAL_URL}\n\n"
-        
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
         if PyroConf.UPI_ID:
             upgrade_text += f" 📱 **UPI (India):** `{PyroConf.UPI_ID}`\n\n"
-        
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
         if PyroConf.TELEGRAM_TON:
             upgrade_text += f" 🛒 **Telegram Pay (TON):** `{PyroConf.TELEGRAM_TON}`\n\n"
-        
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
         if PyroConf.CRYPTO_ADDRESS:
             upgrade_text += f" ₿ **Binance (USDT/BTC/ETH):** `{PyroConf.CRYPTO_ADDRESS}`\n\n"
-        
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
         if PyroConf.CREDIT_CARD:
             upgrade_text += f" 💳 **Credit/Debit Card:** {PyroConf.CREDIT_CARD}\n\n"     
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"    
             
         upgrade_text += "\n"
     
