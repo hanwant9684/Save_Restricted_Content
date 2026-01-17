@@ -5,18 +5,18 @@ from logger import LOGGER
 def get_download_connections(file_size: int) -> int:
     """Optimized connections for downloading."""
     if file_size >= 100 * 1024 * 1024:  # > 100MB
-        return 1
+        return 4
     elif file_size >= 20 * 1024 * 1024:  # > 20MB
-        return 1
+        return 2
     return 1
 
 def get_upload_connections(file_size: int) -> int:
     """Optimized connections for uploading."""
     if file_size >= 50 * 1024 * 1024:   # > 50MB
-        return 2
+        return 8
     elif file_size >= 10 * 1024 * 1024:  # > 10MB
-        return 2
-    return 1
+        return 4
+    return 2
 
 async def download_file_optimized(client: TelegramClient, location, out, progress_callback=None, file_size=None, connection_count=None):
     """

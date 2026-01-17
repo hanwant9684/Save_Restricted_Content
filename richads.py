@@ -16,9 +16,10 @@ class RichAdsManager:
         self.publisher_id = os.getenv("RICHADS_PUBLISHER_ID", "")
         self.widget_id = os.getenv("RICHADS_WIDGET_ID", "")
         self.production = os.getenv("RICHADS_PRODUCTION", "true").lower() == "true"
+        self.for_premium = os.getenv("RICHADS_FOR_PREMIUM", "false").lower() == "true"
         
         if self.publisher_id:
-            LOGGER(__name__).info(f"RichAds initialized - Publisher: {self.publisher_id}, Production: {self.production}")
+            LOGGER(__name__).info(f"RichAds initialized - Publisher: {self.publisher_id}, Production: {self.production}, For Premium: {self.for_premium}")
         else:
             LOGGER(__name__).warning("RichAds not configured - RICHADS_PUBLISHER_ID not set")
     

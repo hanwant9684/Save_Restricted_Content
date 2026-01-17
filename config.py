@@ -35,33 +35,23 @@ def safe_load_dotenv():
             env_path.write_text('\n'.join(valid_lines) + '\n')
         
         # Load the (now cleaned) file
-        load_dotenv(dotenv_path=env_path, override=False)
+        load_dotenv(dotenv_path=env_path, override=True)
 
 # Execute safe load before class definition
 safe_load_dotenv()
 
 class PyroConf:
-    try:
-        val = os.getenv("API_ID", "0")
-        API_ID = int(val) if val and val.strip() else 0
-    except ValueError:
-        API_ID = 0
-
+    # Core API Credentials
+    API_ID = int(os.getenv("API_ID", "0"))
     API_HASH = os.getenv("API_HASH", "")
     BOT_TOKEN = os.getenv("BOT_TOKEN", "")
     BOT_USERNAME = os.getenv("BOT_USERNAME", "")
     SESSION_STRING = os.getenv("SESSION_STRING", "")
-
-    try:
-        OWNER_ID = int(os.getenv("OWNER_ID", "0"))
-    except ValueError:
-        OWNER_ID = 0
+    OWNER_ID = int(os.getenv("OWNER_ID", "0"))
 
     FORCE_SUBSCRIBE_CHANNEL = os.getenv("FORCE_SUBSCRIBE_CHANNEL", "")
     
-    # Optional Dump Channel - Bot will forward all downloaded media here for monitoring
-    # Set this to your channel ID (e.g., -1001234567890) to enable
-    # Leave empty to disable
+    # Optional Dump Channel
     try:
         dump_channel = os.getenv("DUMP_CHANNEL_ID", "")
         DUMP_CHANNEL_ID = int(dump_channel) if dump_channel else None
@@ -74,6 +64,7 @@ class PyroConf:
     UPI_ID = os.getenv("UPI_ID", "")
     TELEGRAM_TON= os.getenv("TELEGRAM_TON", "")
     CRYPTO_ADDRESS = os.getenv("CRYPTO_ADDRESS", "")
+    CREDIT_CARD = os.getenv("CREDIT_CARD", "")
     
     # Ad Monetization - Droplink.co
     # API key is stored in .env file (DROPLINK_API_KEY)
@@ -82,6 +73,7 @@ class PyroConf:
     RICHADS_PUBLISHER_ID = os.getenv("RICHADS_PUBLISHER_ID", "")
     RICHADS_WIDGET_ID = os.getenv("RICHADS_WIDGET_ID", "")
     RICHADS_PRODUCTION = os.getenv("RICHADS_PRODUCTION", "true").lower() == "true"
+    RICHADS_FOR_PREMIUM = os.getenv("RICHADS_FOR_PREMIUM", "false").lower() == "true"
     
     # Cloud Backup Configuration (GitHub)
     CLOUD_BACKUP_SERVICE = os.getenv("CLOUD_BACKUP_SERVICE", "").lower().strip()
@@ -124,13 +116,6 @@ class PyroConf:
         FREE_INTRA_DELAY = int(os.getenv("FREE_INTRA_DELAY", "15"))
     except ValueError:
         FREE_INTRA_DELAY = 15
-    
-    # Connection Configuration for Transfers
-    # VPS has 1Gbps speed and 2GB RAM - we can go much higher
-    try:
-        CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
-    except ValueError:
-        CONNECTIONS_PER_TRANSFER = 16
     
     @staticmethod
     def get_app_url() -> str:
