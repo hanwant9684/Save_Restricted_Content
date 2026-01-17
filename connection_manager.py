@@ -5,9 +5,9 @@ from logger import LOGGER
 def get_download_connections(file_size: int) -> int:
     """Optimized connections for downloading."""
     if file_size >= 100 * 1024 * 1024:  # > 100MB
-        return 4
+        return 1
     elif file_size >= 20 * 1024 * 1024:  # > 20MB
-        return 2
+        return 1
     return 1
 
 def get_upload_connections(file_size: int) -> int:
