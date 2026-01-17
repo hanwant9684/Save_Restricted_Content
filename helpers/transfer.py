@@ -5,15 +5,28 @@ HIGH-SPEED TRANSFER MODULE for Per-User Sessions
 This module implements fast file transfers using FastTelethon.
 Since each user has their own Telegram session, no global connection
 pooling is needed - each session can use full connection capacity.
+
+CONFIGURATION (Environment Variables):
+- CONNECTIONS_PER_TRANSFER: Connections per download/upload (default: 16)
 """
 import os
 import asyncio
+import math
+import inspect
 import gc
-from typing import Optional, Callable
-from telethon import TelegramClient
-from telethon.tl.types import Message, MessageMediaPaidMedia
+from typing import Optional, Callable, BinaryIO, Set, Dict
+from telethon import TelegramClient, utils
+from telethon.tl.types import Message, Document, TypeMessageMedia, InputPhotoFileLocation, InputDocumentFileLocation, MessageMediaPaidMedia
 from logger import LOGGER
-from connection_manager import download_file_optimized, upload_file_optimized
+from FastTelethon import download_file as fast_download, upload_file as fast_upload, ParallelTransferrer
+
+CONNECTIONS_PER_TRANSFER = int(os.getenv("CONNECTIONS_PER_TRANSFER", "16"))
+
+IS_CONSTRAINED = False
+
+MAX_CONNECTIONS = CONNECTIONS_PER_TRANSFER
+MAX_UPLOAD_CONNECTIONS = CONNECTIONS_PER_TRANSFER
+MAX_DOWNLOAD_CONNECTIONS = CONNECTIONS_PER_TRANSFER
 
 async def download_media_fast(
     client: TelegramClient,
@@ -22,20 +35,22 @@ async def download_media_fast(
     progress_callback: Optional[Callable] = None
 ) -> str:
     """
-    Download media using optimized connection capacity.
+    Download media using FastTelethon with full connection capacity.
     """
     if not message.media:
         raise ValueError("Message has no media")
     
     if isinstance(message.media, MessageMediaPaidMedia):
-        # ... existing logic for paid media ...
+        LOGGER(__name__).warning(f"Paid media detected - attempting extended media extraction")
         if hasattr(message.media, 'extended_media') and message.media.extended_media:
             extended = message.media.extended_media
             if isinstance(extended, list) and len(extended) > 0:
                 first_media = extended[0]
                 if hasattr(first_media, 'media') and first_media.media:
+                    LOGGER(__name__).info(f"Extracted media from paid media container")
                     return await client.download_media(first_media.media, file=file, progress_callback=progress_callback)
             elif hasattr(extended, 'media') and extended.media:
+                LOGGER(__name__).info(f"Extracted single media from paid media container")
                 return await client.download_media(extended.media, file=file, progress_callback=progress_callback)
         raise ValueError("Paid media (premium content) cannot be downloaded")
     
@@ -68,27 +83,32 @@ async def download_media_fast(
             file_size = getattr(message.sticker, 'size', 0)
             media_location = message.sticker
         
+        # Replit High-Performance Optimization: Use 16 parallel connections
+        # This utilizes the full CPU/Network capacity of the environment
+        connection_count = 16
+        
+        LOGGER(__name__).info(
+            f"Starting download: {os.path.basename(file)} "
+            f"({file_size/1024/1024:.1f}MB, {connection_count} connections)"
+        )
+        
         if media_location and file_size > 0:
-            os.makedirs(os.path.dirname(file), exist_ok=True)
             with open(file, 'wb') as f:
-                await download_file_optimized(
+                await fast_download(
                     client=client,
                     location=media_location,
                     out=f,
                     progress_callback=progress_callback,
-                    file_size=file_size
+                    file_size=file_size,
+                    connection_count=connection_count
                 )
-            
-            if os.path.exists(file) and os.path.getsize(file) > 0:
-                gc.collect()
-                return file
-            else:
-                raise IOError("File download resulted in empty or missing file")
+            gc.collect()
+            return file
         else:
             return await client.download_media(message, file=file, progress_callback=progress_callback)
         
     except Exception as e:
-        LOGGER(__name__).error(f"Optimized download failed, falling back to standard: {e}")
+        LOGGER(__name__).error(f"FastTelethon download failed, falling back to standard: {e}")
         return await client.download_media(message, file=file, progress_callback=progress_callback)
 
 async def upload_media_fast(
@@ -97,20 +117,30 @@ async def upload_media_fast(
     progress_callback: Optional[Callable] = None
 ):
     """
-    Upload media using optimized connection capacity.
+    Upload media using FastTelethon with full connection capacity.
     """
+    file_size = os.path.getsize(file_path)
+    connection_count = get_connection_count_for_size(file_size)
+    
     file_handle = None
     try:
+        LOGGER(__name__).info(
+            f"Starting upload: {os.path.basename(file_path)} "
+            f"({file_size/1024/1024:.1f}MB, {connection_count} connections)"
+        )
+        
         file_handle = open(file_path, 'rb')
-        result = await upload_file_optimized(
+        return await fast_upload(
             client=client,
             file=file_handle,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            connection_count=connection_count
         )
-        return result
+        
     except Exception as e:
-        LOGGER(__name__).error(f"Optimized upload failed: {e}")
+        LOGGER(__name__).error(f"FastTelethon upload failed: {e}")
         return None
+        
     finally:
         if file_handle:
             try:
@@ -118,3 +148,34 @@ async def upload_media_fast(
             except:
                 pass
         gc.collect()
+
+
+def get_connection_count_for_size(file_size: int, max_count: int = CONNECTIONS_PER_TRANSFER) -> int:
+    """
+    Determine optimal connection count based on file size.
+    
+    Larger files benefit from more connections, while smaller files
+    don't need as many.
+    """
+    if file_size >= 50 * 1024 * 1024:
+        return max_count
+    elif file_size >= 10 * 1024 * 1024:
+        return min(8, max_count)
+    elif file_size >= 1 * 1024 * 1024:
+        return min(8, max_count)
+    elif file_size >= 10 * 1024:
+        return min(8, max_count)
+    else:
+        return min(8, max_count)
+
+
+def _optimized_connection_count_upload(file_size, max_count=MAX_UPLOAD_CONNECTIONS, full_size=100*1024*1024):
+    """Connection count function for uploads."""
+    return get_connection_count_for_size(file_size, max_count)
+
+def _optimized_connection_count_download(file_size, max_count=MAX_DOWNLOAD_CONNECTIONS, full_size=100*1024*1024):
+    """Connection count function for downloads."""
+    return get_connection_count_for_size(file_size, max_count)
+
+
+ParallelTransferrer._get_connection_count = staticmethod(_optimized_connection_count_upload)
