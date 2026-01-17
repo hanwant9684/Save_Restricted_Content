@@ -78,6 +78,8 @@ def paid_or_admin_only(func):
         if user_type not in ['paid', 'admin']:
             await event.respond(
                 "❌ **This feature is available for premium users only.**\n\n"
+                "💎 **Get Premium Access:**\n\n"
+                "🎁 **FREE Option:** Use `/getpremium` - Watch a quick ad!\n"
                 "💰 **Paid Option:** Use `/upgrade` - Only $1/month\n\n"
                 "✅ **Premium Benefits:**\n"
                 "• Unlimited downloads\n"
@@ -100,9 +102,11 @@ def check_download_limit(func):
             return
 
         # Check download limits
-        can_download, message_text, remaining = db.can_download(user_id)
+        can_download, message_text = db.can_download(user_id)
         if not can_download:
+            from ad_monetization import PREMIUM_DOWNLOADS
             keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton.callback(f"🎁 Watch Ad & Get {PREMIUM_DOWNLOADS} Downloads", "watch_ad_now")],
                 [InlineKeyboardButton.callback("💰 Upgrade to Premium", "upgrade_premium")]
             ])
             sent_msg = await event.respond(message_text, buttons=keyboard.to_telethon())
@@ -239,7 +243,20 @@ def force_subscribe(func):
                 # Get channel entity first
                 chat_entity = await client.get_entity(channel)
                 
-                # Best way to check membership in Telethon v1.x is get_permissions
+                # Try to get user as participant - this will raise UserNotParticipantError if not a member
+                participant = await client.get_participant(chat_entity, user_id)
+                if participant:
+                    # User is a member
+                    return await func(event)
+            except UserNotParticipantError:
+                # User is not in channel, fall through to show join message
+                pass
+            except Exception as e:
+                # If get_participant fails for other reasons, try alternative method
+                LOGGER(__name__).debug(f"get_participant failed, trying get_permissions: {e}")
+                if chat_entity is None:
+                    # If we couldn't get entity, allow access to avoid blocking
+                    return await func(event)
                 try:
                     # Fallback: check if user has permissions
                     permissions = await client.get_permissions(chat_entity, user_id)
@@ -248,15 +265,16 @@ def force_subscribe(func):
                         return await func(event)
                 except UserNotParticipantError:
                     pass  # User not in channel, show join message
-                except Exception as e:
-                    LOGGER(__name__).debug(f"get_permissions failed: {e}")
-                    # Try another way or just allow
+                except Exception as e2:
+                    LOGGER(__name__).error(f"Error checking permissions: {e2}")
+                    # If there's an error checking, allow access to avoid blocking users
                     return await func(event)
-            except Exception as e:
-                LOGGER(__name__).error(f"Error checking entity for subscription: {e}")
-                return await func(event)
                     
         except (ChatAdminRequiredError, ChannelPrivateError) as e:
+            LOGGER(__name__).error(f"Bot lacks permission to check channel membership: {e}")
+            # If bot can't check, allow access (don't block users due to config error)
+            return await func(event)
+        except Exception as e:
             LOGGER(__name__).error(f"Error checking channel membership: {e}")
             # If there's an error checking, allow access to avoid blocking users
             return await func(event)

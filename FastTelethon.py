@@ -18,7 +18,7 @@ from telethon.tl.functions.auth import ExportAuthorizationRequest, ImportAuthori
 from telethon.tl.functions.upload import (GetFileRequest, SaveFilePartRequest,
                                           SaveBigFilePartRequest)
 from telethon.tl.types import (Document, InputFileLocation, InputDocumentFileLocation,
-                               InputPeerPhotoFileLocation, InputFileLocation, InputPhotoFileLocation, TypeInputFile,
+                               InputPhotoFileLocation, InputPeerPhotoFileLocation, TypeInputFile,
                                InputFileBig, InputFile)
 
 try:
@@ -157,51 +157,14 @@ class ParallelTransferrer:
         import gc
         gc.collect(0)
 
-    async def init_upload(self, file_id: int, file_size: int, part_size_kb: Optional[float] = None,
-                          connection_count: Optional[int] = None) -> Tuple[int, int, bool]:
-        # OPTIMIZED: Always use maximum part size (512KB) for fastest uploads
-        part_size = (part_size_kb or 512) * 1024  # 512KB max chunk size
-        part_count = (file_size + part_size - 1) // part_size
-        is_large = file_size > 10 * 1024 * 1024
-        await self._init_upload(connection_count or 1, file_id, part_count, is_large)
-        return part_size, part_count, is_large
-
-    async def upload(self, part: bytes) -> None:
-        if self.upload_ticker >= len(self.senders):
-            self.upload_ticker = 0
-        await self.senders[self.upload_ticker].next(part)
-        self.upload_ticker = (self.upload_ticker + 1) % len(self.senders)
-
-    async def finish_upload(self) -> None:
-        await self._cleanup()
-
-    async def download(self, file: TypeLocation, file_size: int,
-                       part_size_kb: Optional[float] = None,
-                       connection_count: Optional[int] = None) -> AsyncGenerator[bytes, None]:
-        # OPTIMIZED: Always use maximum part size (512KB) for fastest downloads
-        # Larger chunks = fewer requests = higher throughput
-        part_size = (part_size_kb or 512) * 1024  # 512KB max chunk size
-        part_count = math.ceil(file_size / part_size)
-        log.debug("Starting parallel download: "
-                  f"{connection_count} {part_size} {part_count} {file!s}")
-        await self._init_download(connection_count or 1, file, part_count, part_size)
-
-        try:
-            part = 0
-            while part < part_count:
-                tasks = []
-                for sender in self.senders:
-                    tasks.append(self.loop.create_task(sender.next()))
-                for task in tasks:
-                    data = await task
-                    if not data:
-                        break
-                    yield data
-                    part += 1
-                    # log.debug(f"Part {part} downloaded")
-        finally:
-            # log.debug("Parallel download finished, cleaning up connections")
-            await self._cleanup()
+    @staticmethod
+    def _get_connection_count(file_size: int, max_count: int = 16,
+                              full_size: int = 100 * 1024 * 1024) -> int:
+        # Each user has their own session, so each transfer can use full connection capacity
+        # This method is monkeypatched by helpers/transfer.py with size-aware logic
+        if file_size <= 0:
+            return 16  # Safe fallback for unknown size
+        return max_count
 
     async def _init_download(self, connections: int, file: TypeLocation, part_count: int,
                              part_size: int) -> None:
@@ -316,6 +279,54 @@ class ParallelTransferrer:
             await sender.send(req)
             self.auth_key = sender.auth_key
         return sender
+
+    async def init_upload(self, file_id: int, file_size: int, part_size_kb: Optional[float] = None,
+                          connection_count: Optional[int] = None) -> Tuple[int, int, bool]:
+        connection_count = connection_count or self._get_connection_count(file_size)
+        # OPTIMIZED: Always use maximum part size (512KB) for fastest uploads
+        part_size = (part_size_kb or 512) * 1024  # 512KB max chunk size
+        part_count = (file_size + part_size - 1) // part_size
+        is_large = file_size > 10 * 1024 * 1024
+        await self._init_upload(connection_count, file_id, part_count, is_large)
+        return part_size, part_count, is_large
+
+    async def upload(self, part: bytes) -> None:
+        if self.upload_ticker >= len(self.senders):
+            self.upload_ticker = 0
+        await self.senders[self.upload_ticker].next(part)
+        self.upload_ticker = (self.upload_ticker + 1) % len(self.senders)
+
+    async def finish_upload(self) -> None:
+        await self._cleanup()
+
+    async def download(self, file: TypeLocation, file_size: int,
+                       part_size_kb: Optional[float] = None,
+                       connection_count: Optional[int] = None) -> AsyncGenerator[bytes, None]:
+        connection_count = connection_count or self._get_connection_count(file_size)
+        # OPTIMIZED: Always use maximum part size (512KB) for fastest downloads
+        # Larger chunks = fewer requests = higher throughput
+        part_size = (part_size_kb or 512) * 1024  # 512KB max chunk size
+        part_count = math.ceil(file_size / part_size)
+        log.debug("Starting parallel download: "
+                  f"{connection_count} {part_size} {part_count} {file!s}")
+        await self._init_download(connection_count, file, part_count, part_size)
+
+        try:
+            part = 0
+            while part < part_count:
+                tasks = []
+                for sender in self.senders:
+                    tasks.append(self.loop.create_task(sender.next()))
+                for task in tasks:
+                    data = await task
+                    if not data:
+                        break
+                    yield data
+                    part += 1
+                    # log.debug(f"Part {part} downloaded")
+        finally:
+            # log.debug("Parallel download finished, cleaning up connections")
+            await self._cleanup()
 
 
 parallel_transfer_locks: DefaultDict[int, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())

@@ -446,11 +446,11 @@ class DatabaseManager:
             LOGGER(__name__).error(f"Error incrementing usage for {user_id}: {e}")
             return False
 
-    def can_download(self, user_id: int, count: int = 1) -> tuple[bool, str, int]:
+    def can_download(self, user_id: int, count: int = 1) -> tuple[bool, str]:
         user_type = self.get_user_type(user_id)
 
         if user_type in ['admin', 'paid']:
-            return True, "", 999999  # Unlimited for premium
+            return True, ""
 
         self.reset_ad_downloads_if_needed(user_id)
 
@@ -458,16 +458,17 @@ class DatabaseManager:
         ad_downloads = user.get('ad_downloads', 0) if user else 0
         
         if ad_downloads > 0:
-            return True, "", ad_downloads
+            if ad_downloads < count:
+                quota_message = f"❌ **Insufficient ad downloads**\n\n📊 You have {ad_downloads} ad download(s) but need {count} for this media group."
+                return False, quota_message
+            return True, ""
 
         daily_usage = self.get_daily_usage(user_id)
-        remaining = max(0, 5 - daily_usage)
-        
-        if remaining <= 0:
+        if daily_usage + count > 5:
             quota_message = f"📊 **Daily limit reached**"
-            return False, quota_message, 0
+            return False, quota_message
 
-        return True, "", remaining
+        return True, ""
 
     def get_all_users(self) -> List[int]:
         try:

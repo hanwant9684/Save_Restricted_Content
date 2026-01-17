@@ -28,18 +28,18 @@ class AdMonetization:
         session_data = db.get_ad_session(session_id)
         
         if not session_data:
-            return False, "", "❌ Invalid or expired session. Please start over."
+            return False, "", "❌ Invalid or expired session. Please start over with /getpremium"
         
         # Check if session expired (30 minutes max)
         elapsed_time = datetime.now() - session_data['created_at']
         if elapsed_time > timedelta(minutes=SESSION_VALIDITY_MINUTES):
             db.delete_ad_session(session_id)
-            return False, "", "⏰ Session expired. Please start over."
+            return False, "", "⏰ Session expired. Please start over with /getpremium"
         
         # Atomically mark session as used (prevents race condition)
         success = db.mark_ad_session_used(session_id)
         if not success:
-            return False, "", "❌ This session has already been used. Please try again."
+            return False, "", "❌ This session has already been used. Please use /getpremium to get a new link."
         
         # Generate verification code
         verification_code = self._generate_verification_code(session_data['user_id'])
@@ -65,7 +65,7 @@ class AdMonetization:
         verification_data = db.get_verification_code(code)
         
         if not verification_data:
-            return False, "❌ **Invalid verification code.**\n\nPlease make sure you entered the code correctly or try again."
+            return False, "❌ **Invalid verification code.**\n\nPlease make sure you entered the code correctly or get a new one with `/getpremium`"
         
         if verification_data['user_id'] != user_id:
             return False, "❌ **This verification code belongs to another user.**"
@@ -73,7 +73,7 @@ class AdMonetization:
         created_at = verification_data['created_at']
         if datetime.now() - created_at > timedelta(minutes=30):
             db.delete_verification_code(code)
-            return False, "⏰ **Verification code has expired.**\n\nCodes expire after 30 minutes. Please try again."
+            return False, "⏰ **Verification code has expired.**\n\nCodes expire after 30 minutes. Please get a new one with `/getpremium`"
         
         db.delete_verification_code(code)
         
