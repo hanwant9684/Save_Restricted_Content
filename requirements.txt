@@ -40,3 +40,4 @@ Telethon[cryptg]==1.42.0
 ujson==5.11.0
 uvloop==0.22.1
 waitress==3.0.2
+psutil 

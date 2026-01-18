@@ -25,7 +25,9 @@ from helpers.utils import (
     progressArgs,
     send_media,
     safe_progress_callback,
-    get_intra_request_delay
+    get_intra_request_delay,
+    force_ram_cleanup,
+    ram_cleaner_background_task
 )
 
 from helpers.transfer import download_media_fast
@@ -243,6 +245,9 @@ async def start(event):
         "🔑 **Ready to start?** Login now with `/login <phone>`"
     )
 
+    # Start RAM cleaner background task
+    track_task(ram_cleaner_background_task())
+    
     # Verify attribution
     verify_attribution()
     
@@ -592,6 +597,8 @@ async def handle_download(bot_client, event, post_url: str, user_client=None, in
                     event.sender_id,
                     source_url=post_url,
                 )
+                # Force RAM cleanup after upload complete
+                await force_ram_cleanup()
                 return True
 
             try:
