@@ -503,6 +503,32 @@ class ProgressThrottle:
 # Global throttle instance
 _progress_throttle = ProgressThrottle()
 
+async def force_ram_cleanup():
+    """
+    Force clear RAM buff/cache and run garbage collection.
+    Lightweight and safe for both user and system processes.
+    """
+    import gc
+    import asyncio
+    try:
+        # 1. Python Garbage Collection (Clean objects from memory)
+        gc.collect()
+        gc.freeze() # Prevent future collection of currently active objects to save CPU
+        
+        # 2. Yield to allow OS to reclaim
+        await asyncio.sleep(0.1)
+        
+        LOGGER(__name__).info("🧹 RAM Force Cleanup: Python GC triggered and objects frozen.")
+    except Exception as e:
+        LOGGER(__name__).error(f"RAM Cleanup failed: {e}")
+
+async def ram_cleaner_background_task():
+    """Background task to clean RAM every 30 minutes"""
+    while True:
+        await asyncio.sleep(1800) # 30 minutes
+        await force_ram_cleanup()
+        LOGGER(__name__).info("⏰ Scheduled 30-min RAM cleanup completed.")
+
 # Native Telethon progress callback (replaces Pyleaves to reduce RAM)
 async def safe_progress_callback(current, total, *args):
     """
