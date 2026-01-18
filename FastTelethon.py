@@ -111,13 +111,15 @@ class UploadSender:
 
     async def _next(self, data: bytes) -> None:
         self.request.bytes = data
-        # Use low-level send instead of high-level _call to bypass overhead
-        # self.client._call adds significant internal logging and state tracking
-        await self.sender.send(self.request)
+        # Removed debug logging to save CPU
+        # log.debug(f"Sending file part {self.request.file_part}/{self.part_count}"
+        #           f" with {len(data)} bytes")
+        await self.client._call(self.sender, self.request)
         self.request.file_part += self.stride
-        
+        # Suggest GC only on large chunks to keep memory clean without slowing down small writes
         if len(data) >= 512 * 1024:
             import gc
+            # Only collect generation 0 for speed
             gc.collect(0)
 
     async def disconnect(self) -> None:
@@ -157,12 +159,10 @@ class ParallelTransferrer:
 
     async def init_upload(self, file_id: int, file_size: int, part_size_kb: Optional[float] = None,
                           connection_count: Optional[int] = None) -> Tuple[int, int, bool]:
-        # HYPER-OPTIMIZED: Use larger 512KB chunks to reduce overhead
-        # This is the maximum chunk size allowed by Telegram MTProto
-        part_size = 512 * 1024
+        # OPTIMIZED: Always use maximum part size (512KB) for fastest uploads
+        part_size = (part_size_kb or 512) * 1024  # 512KB max chunk size
         part_count = (file_size + part_size - 1) // part_size
         is_large = file_size > 10 * 1024 * 1024
-            
         await self._init_upload(connection_count or 1, file_id, part_count, is_large)
         return part_size, part_count, is_large
 
@@ -321,8 +321,7 @@ class ParallelTransferrer:
 parallel_transfer_locks: DefaultDict[int, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
 
-def stream_file(file_to_stream: BinaryIO, chunk_size=1024*1024):
-    """Read file in 1MB chunks to keep the upload pipe full"""
+def stream_file(file_to_stream: BinaryIO, chunk_size=512*1024):
     while True:
         data_read = file_to_stream.read(chunk_size)
         if not data_read:
