@@ -117,6 +117,3 @@ async def upload_media_fast(
                 file_handle.close()
             except:
                 pass
-        # Yield to allow asyncio loops to close before GC
-        await asyncio.sleep(0.1)
-        gc.collect()
