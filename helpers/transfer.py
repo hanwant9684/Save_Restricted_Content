@@ -117,3 +117,4 @@ async def upload_media_fast(
                 file_handle.close()
             except:
                 pass
+        gc.collect()
