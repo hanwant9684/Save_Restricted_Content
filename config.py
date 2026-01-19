@@ -103,19 +103,17 @@ class PyroConf:
     
     # Intra-Request Delay Times (in seconds)
     # Wait time BETWEEN items within a single request (media groups, batch downloads)
-    # These delays ensure files are properly cleaned up and RAM is released
-    # before starting the next download (critical for 512MB RAM limit)
-    # Premium users: 10 seconds for proper cleanup
-    # Free users: 15 seconds for proper cleanup
+    # Premium users: 1 second
+    # Free users: 3 seconds
     try:
-        PREMIUM_INTRA_DELAY = int(os.getenv("PREMIUM_INTRA_DELAY", "10"))
+        PREMIUM_INTRA_DELAY = int(os.getenv("PREMIUM_INTRA_DELAY", "1"))
     except ValueError:
-        PREMIUM_INTRA_DELAY = 10
+        PREMIUM_INTRA_DELAY = 1
     
     try:
-        FREE_INTRA_DELAY = int(os.getenv("FREE_INTRA_DELAY", "15"))
+        FREE_INTRA_DELAY = int(os.getenv("FREE_INTRA_DELAY", "3"))
     except ValueError:
-        FREE_INTRA_DELAY = 15
+        FREE_INTRA_DELAY = 3
     
     @staticmethod
     def get_app_url() -> str:

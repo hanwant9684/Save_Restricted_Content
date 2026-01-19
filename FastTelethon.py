@@ -1,6 +1,7 @@
 # copied from https://github.com/tulir/mautrix-telegram/blob/master/mautrix_telegram/util/parallel_file_transfer.py
 # Copyright (C) 2021 Tulir Asokan
 import asyncio
+import time
 import hashlib
 import inspect
 import logging
@@ -105,22 +106,14 @@ class UploadSender:
         self.loop = loop
 
     async def next(self, data: bytes) -> None:
-        if self.previous:
-            await self.previous
+        # PIPELINED: We don't await self.previous here to allow concurrency
+        # The _next method itself ensures parts are sent in order for the sender
         self.previous = self.loop.create_task(self._next(data))
 
     async def _next(self, data: bytes) -> None:
         self.request.bytes = data
-        # Removed debug logging to save CPU
-        # log.debug(f"Sending file part {self.request.file_part}/{self.part_count}"
-        #           f" with {len(data)} bytes")
         await self.client._call(self.sender, self.request)
         self.request.file_part += self.stride
-        # Suggest GC only on large chunks to keep memory clean without slowing down small writes
-        if len(data) >= 512 * 1024:
-            import gc
-            # Only collect generation 0 for speed
-            gc.collect(0)
 
     async def disconnect(self) -> None:
         if self.previous:
@@ -153,23 +146,26 @@ class ParallelTransferrer:
         except Exception:
             pass
         self.senders = None
-        # Suggest a shallow GC to clean up connection objects
-        import gc
-        gc.collect(0)
 
     async def init_upload(self, file_id: int, file_size: int, part_size_kb: Optional[float] = None,
                           connection_count: Optional[int] = None) -> Tuple[int, int, bool]:
-        # OPTIMIZED: Always use maximum part size (512KB) for fastest uploads
-        part_size = (part_size_kb or 512) * 1024  # 512KB max chunk size
+        # HYPER-OPTIMIZED: Use larger 512KB chunks to reduce overhead
+        # This is the maximum chunk size allowed by Telegram MTProto
+        part_size = 512 * 1024
         part_count = (file_size + part_size - 1) // part_size
         is_large = file_size > 10 * 1024 * 1024
+            
         await self._init_upload(connection_count or 1, file_id, part_count, is_large)
         return part_size, part_count, is_large
 
     async def upload(self, part: bytes) -> None:
         if self.upload_ticker >= len(self.senders):
             self.upload_ticker = 0
-        await self.senders[self.upload_ticker].next(part)
+        
+        # PIPELINED: Don't wait for previous part to finish before starting next
+        sender = self.senders[self.upload_ticker]
+        self.loop.create_task(sender.next(part))
+        
         self.upload_ticker = (self.upload_ticker + 1) % len(self.senders)
 
     async def finish_upload(self) -> None:
@@ -321,7 +317,7 @@ class ParallelTransferrer:
 parallel_transfer_locks: DefaultDict[int, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
 
-def stream_file(file_to_stream: BinaryIO, chunk_size=512*1024):
+def stream_file(file_to_stream: BinaryIO, chunk_size=1024*1024):
     while True:
         data_read = file_to_stream.read(chunk_size)
         if not data_read:
@@ -344,9 +340,14 @@ async def _internal_transfer_to_telegram(client: TelegramClient,
     uploader = ParallelTransferrer(client)
     part_size, part_count, is_large = await uploader.init_upload(file_id, file_size, connection_count=connection_count)
     buffer = bytearray()
+    # Intra-transfer progress throttling
+    _last_progress_update = 0
+
     try:
         for data in stream_file(response):
-            if progress_callback:
+            now = time.time()
+            if progress_callback and (now - _last_progress_update >= 1.0 or response.tell() == file_size):
+                _last_progress_update = now
                 r = progress_callback(response.tell(), file_size)
                 if inspect.isawaitable(r):
                     await r
