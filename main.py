@@ -1386,17 +1386,20 @@ async def upgrade_command(event):
             methods.append(f"  🅿️ **PayPal:**\n  └ {PyroConf.PAYPAL_URL}")
         
         if PyroConf.UPI_ID:
-            methods.append(f"  🏦 **UPI (India):**\n  └ `{PyroConf.UPI_ID}`")
+            methods.append(f"  🇮🇳 **UPI (India):**\n  └ `{PyroConf.UPI_ID}`")
         
         if PyroConf.TELEGRAM_TON:
             methods.append(f"  💎 **TON (Telegram):**\n  └ `{PyroConf.TELEGRAM_TON}`")
         
         if PyroConf.CRYPTO_ADDRESS:
-            methods.append(f"  🪙 **Crypto (Binance/USDT):**\n  └ `{PyroConf.CRYPTO_ADDRESS}`")
+            methods.append(f"  🪙 **Binance (Crypto/USDT):**\n  └ `{PyroConf.CRYPTO_ADDRESS}`")
         
         if PyroConf.CREDIT_CARD:
             methods.append(f"  💳 **Credit/Debit Card:**\n  └ {PyroConf.CREDIT_CARD}")
-        
+       
+        if PyroConf.APPLE_PAY:
+            methods.append(f"  🍎 **Apple Pay:**\n  └ {PyroConf.APPLE_PAY}")    
+            
         upgrade_text += "\n" + "\n\n".join(methods) + "\n\n"
     
     upgrade_text += "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"

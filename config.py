@@ -65,6 +65,7 @@ class PyroConf:
     TELEGRAM_TON= os.getenv("TELEGRAM_TON", "")
     CRYPTO_ADDRESS = os.getenv("CRYPTO_ADDRESS", "")
     CREDIT_CARD = os.getenv("CREDIT_CARD", "")
+    APPLE_PAY = os.getenv("APPLE_PAY", "")
     
     # Ad Monetization - Droplink.co
     # API key is stored in .env file (DROPLINK_API_KEY)
