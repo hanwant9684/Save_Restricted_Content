@@ -116,6 +116,12 @@ class PyroConf:
         FREE_INTRA_DELAY = int(os.getenv("FREE_INTRA_DELAY", "15"))
     except ValueError:
         FREE_INTRA_DELAY = 15
+
+    # RichAds Daily Limit
+    try:
+        RICHADS_DAILY_LIMIT = int(os.getenv("RICHADS_DAILY_LIMIT", "3"))
+    except ValueError:
+        RICHADS_DAILY_LIMIT = 3
     
     @staticmethod
     def get_app_url() -> str:

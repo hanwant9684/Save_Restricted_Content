@@ -85,6 +85,12 @@ class RichAdsManager:
             LOGGER(__name__).debug("RichAds not enabled")
             return False
             
+        # Check daily limit from database
+        from database_sqlite import db
+        if not db.can_show_ad(chat_id):
+            LOGGER(__name__).info(f"RichAds: Daily limit reached for user {chat_id}")
+            return False
+            
         ads = await self.fetch_ad(language_code=language_code, telegram_id=str(chat_id))
         
         if not ads or len(ads) == 0:
@@ -143,6 +149,9 @@ class RichAdsManager:
                     buttons=buttons.to_telethon(),
                     parse_mode='md'
                 )
+            
+            # Increment ad count ONLY after successful delivery
+            db.increment_ad_count(chat_id)
             
             # Notify impression
             if ad.get("notification_url"):

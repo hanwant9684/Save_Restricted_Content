@@ -41,6 +41,7 @@ class DatabaseManager:
             conn = self._get_connection()
             cursor = conn.cursor()
             
+            # Professional Table Creation with proper constraints
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     user_id INTEGER PRIMARY KEY,
@@ -92,23 +93,6 @@ class DatabaseManager:
             ''')
             
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS ad_sessions (
-                    session_id TEXT PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    created_at TEXT NOT NULL,
-                    used INTEGER DEFAULT 0
-                )
-            ''')
-            
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS ad_verifications (
-                    code TEXT PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    created_at TEXT NOT NULL
-                )
-            ''')
-            
-            cursor.execute('''
                 CREATE TABLE IF NOT EXISTS legal_acceptance (
                     user_id INTEGER PRIMARY KEY,
                     accepted_terms INTEGER DEFAULT 0,
@@ -144,17 +128,86 @@ class DatabaseManager:
                 )
             ''')
             
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ad_tracking (
+                    user_id INTEGER NOT NULL,
+                    date TEXT NOT NULL,
+                    ad_count INTEGER DEFAULT 0,
+                    PRIMARY KEY(user_id, date)
+                )
+            ''')
+            
+            # Indexes
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_daily_usage_user_date ON daily_usage(user_id, date)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ad_sessions_created ON ad_sessions(created_at)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ad_verifications_created ON ad_verifications(created_at)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_legal_acceptance_date ON legal_acceptance(acceptance_date)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_promo_codes_active ON promo_codes(is_active, expiration_date)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_promo_usage_user ON promo_code_usage(user_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ad_tracking_date ON ad_tracking(date)')
+            
+            # Automigration: Remove obsolete tables
+            obsolete_tables = ['ad_sessions', 'ad_verifications']
+            for table in obsolete_tables:
+                cursor.execute(f"DROP TABLE IF EXISTS {table}")
             
             conn.commit()
             conn.close()
             
-            LOGGER(__name__).info("Database tables and indexes created successfully")
+            LOGGER(__name__).info("Database professionalized and migrated successfully")
+
+    def can_show_ad(self, user_id: int) -> bool:
+        """Check if user can see another ad today (limit from config)"""
+        try:
+            from config import PyroConf
+            limit = PyroConf.RICHADS_DAILY_LIMIT
+            date = datetime.now().strftime('%Y-%m-%d')
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            # Ensure table exists immediately before use as safety fallback
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ad_tracking (
+                    user_id INTEGER NOT NULL,
+                    date TEXT NOT NULL,
+                    ad_count INTEGER DEFAULT 0,
+                    PRIMARY KEY(user_id, date)
+                )
+            ''')
+            
+            cursor.execute('SELECT ad_count FROM ad_tracking WHERE user_id = ? AND date = ?', (user_id, date))
+            row = cursor.fetchone()
+            conn.close()
+            
+            count = row['ad_count'] if row else 0
+            return count < limit
+        except Exception as e:
+            LOGGER(__name__).error(f"Error checking ad tracking for {user_id}: {e}")
+            return True # Fallback to showing ad if DB fails
+
+    def increment_ad_count(self, user_id: int) -> bool:
+        """Increment ad count for user today and handle automigration of columns if needed"""
+        try:
+            date = datetime.now().strftime('%Y-%m-%d')
+            with self.lock:
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                
+                # Verify if column exists (example of dynamic schema management)
+                cursor.execute("PRAGMA table_info(ad_tracking)")
+                columns = [column[1] for column in cursor.fetchall()]
+                if 'ad_count' not in columns:
+                    cursor.execute("ALTER TABLE ad_tracking ADD COLUMN ad_count INTEGER DEFAULT 0")
+                
+                cursor.execute('''
+                    INSERT INTO ad_tracking (user_id, date, ad_count) 
+                    VALUES (?, ?, 1) 
+                    ON CONFLICT(user_id, date) DO UPDATE SET ad_count = ad_count + 1
+                ''', (user_id, date))
+                conn.commit()
+                conn.close()
+            return True
+        except Exception as e:
+            LOGGER(__name__).error(f"Error incrementing ad count for {user_id}: {e}")
+            return False
 
     def add_user(self, user_id: int, username: Optional[str] = None, first_name: Optional[str] = None,
                  last_name: Optional[str] = None, user_type: str = 'free') -> bool:
@@ -184,7 +237,7 @@ class DatabaseManager:
                     if last_name:
                         updates.append('last_name = ?')
                         params.append(last_name)
-                    params.append(user_id)
+                    params.append(str(user_id))
                     
                     cursor.execute(f'UPDATE users SET {", ".join(updates)} WHERE user_id = ?', params)
                 
