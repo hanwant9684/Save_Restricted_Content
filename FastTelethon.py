@@ -326,8 +326,9 @@ class ParallelTransferrer:
                     if sock:
                         import socket
                         # Maximize socket send/receive buffers
-                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
-                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
+                        # Increased to 4MB for high-speed link
+                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4 * 1024 * 1024)
+                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 * 1024 * 1024)
                         # Enable TCP_NODELAY to reduce latency
                         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             except Exception:

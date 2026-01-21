@@ -105,6 +105,21 @@ USER_TASKS = {}
 # Track bot start time for filtering old updates
 bot.start_time = None
 
+# High-Speed Encryption Check
+import sys
+import os
+
+# REPLIT-SPECIFIC FIX: Force Python 3.11 for binary compatibility
+try:
+    import cryptg
+    LOGGER(__name__).info("Cryptg detected: High-speed encryption enabled.")
+except Exception:
+    try:
+        import tgcrypto
+        LOGGER(__name__).info("TgCrypto detected: High-speed encryption enabled.")
+    except Exception:
+        LOGGER(__name__).warning("High-speed encryption (TgCrypto/Cryptg) NOT detected. Speed will be limited.")
+
 def is_new_update(event):
     """Filter function to ignore messages older than bot start time"""
     if not bot.start_time:
@@ -1392,11 +1407,11 @@ async def upgrade_command(event):
             methods.append(f"  💎 **TON (Telegram):**\n  └ `{PyroConf.TELEGRAM_TON}`")
         
         if PyroConf.CRYPTO_ADDRESS:
-            methods.append(f"  🪙 **Binance (Crypto/USDT):**\n  └ `{PyroConf.CRYPTO_ADDRESS}`")
+            methods.append(f"  🪙 **Crypto (Binance/USDT):**\n  └ `{PyroConf.CRYPTO_ADDRESS}`")
         
         if PyroConf.CREDIT_CARD:
             methods.append(f"  💳 **Credit/Debit Card:**\n  └ {PyroConf.CREDIT_CARD}")
-       
+        
         if PyroConf.APPLE_PAY:
             methods.append(f"  🍎 **Apple Pay:**\n  └ {PyroConf.APPLE_PAY}")    
             

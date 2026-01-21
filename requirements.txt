@@ -12,3 +12,4 @@ msgpack==1.1.2
 hiredis==3.3.0
 pydantic==2.12.5
 cryptg==0.5.2
+tgcrypto==1.2.5

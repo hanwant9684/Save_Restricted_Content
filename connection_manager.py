@@ -13,14 +13,14 @@ def get_download_connections(file_size: int) -> int:
 def get_upload_connections(file_size: int) -> int:
     """Optimized connections for uploading."""
     if file_size >= 100 * 1024 * 1024:  # > 100MB
-        return 8
+        return 8  # Reduced from 16 to balance multiple users
     elif file_size >= 50 * 1024 * 1024:  # > 50MB
-        return 6
+        return 6  # Reduced from 12
     elif file_size >= 10 * 1024 * 1024:  # > 10MB
-        return 4
+        return 4   # Reduced from 8
     elif file_size >= 1 * 1024 * 1024:  # > 1MB
-        return 2    
-    return 1
+        return 2   # Reduced from 4
+    return 1       # Reduced from 2
 
 async def download_file_optimized(client: TelegramClient, location, out, progress_callback=None, file_size=None, connection_count=None):
     """
