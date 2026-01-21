@@ -315,6 +315,24 @@ class ParallelTransferrer:
             req = InvokeWithLayerRequest(LAYER, self.client._init_request)
             await sender.send(req)
             self.auth_key = sender.auth_key
+        
+        # Optimize sender internals for speed
+        if hasattr(sender, 'writer') and sender.writer:
+            try:
+                # Set a larger buffer size for the underlying transport if accessible
+                transport = sender.writer._transport
+                if hasattr(transport, 'get_extra_info'):
+                    sock = transport.get_extra_info('socket')
+                    if sock:
+                        import socket
+                        # Maximize socket send/receive buffers
+                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
+                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
+                        # Enable TCP_NODELAY to reduce latency
+                        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            except Exception:
+                pass
+                
         return sender
 
 
