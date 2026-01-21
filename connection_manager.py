@@ -13,7 +13,7 @@ def get_download_connections(file_size: int) -> int:
 def get_upload_connections(file_size: int) -> int:
     """Optimized connections for uploading."""
     if file_size >= 100 * 1024 * 1024:  # > 100MB
-        return 8  # Reduced from 16 to balance multiple users
+        return 12  # Reduced from 16 to balance multiple users
     elif file_size >= 50 * 1024 * 1024:  # > 50MB
         return 6  # Reduced from 12
     elif file_size >= 10 * 1024 * 1024:  # > 10MB
